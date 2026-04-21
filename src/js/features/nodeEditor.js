@@ -1,6 +1,6 @@
 // ===================================================================================
 // NODE EDITOR; Main Controller
-//   — Mode toggle (mirrors drawMode pattern)
+//   — Mode toggle (mirrors labMode pattern)
 //   — Table ↔ Node sync (enable loads sheets as nodes; disable writes nodes back)
 //   — DOM rendering for node cards
 //   — Inline cell editing with copy-on-write
@@ -21,9 +21,9 @@ function enableNodeEditor() {
     $('#nodeEditorToggle').addClass('active').attr('title', 'Node Editor: ON');
     $('#selectToolToggle').removeClass('active');
 
-    // Exit draw mode if active
-    if (window.drawModeEnabled && typeof disableDrawMode === 'function') {
-        disableDrawMode();
+    // Exit lab mode if active
+    if (window.labModeEnabled && typeof disableLab === 'function') {
+        disableLab();
     }
 
     // Save the current sheet state so it survives the mode switch

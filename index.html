@@ -147,7 +147,8 @@
     <script src="src/js/features/tableManipulation.js"></script>
     <script src="src/js/features/tableOperations.js"></script>
     <script src="src/js/features/tifanyTabs.js"></script>
-    <script src="src/js/features/drawMode.js"></script>
+    <script src="src/js/features/labFunctions.js"></script>
+    <script src="src/js/features/labMode.js"></script>
     <script src="src/js/features/sheetManager.js"></script>
     <script src="src/js/features/nodeRenderer.js"></script>
     <script src="src/js/features/nodeInteractions.js"></script>
@@ -233,10 +234,10 @@
                 <i class="fas fa-table"></i>
             </button>
 
-            <!-- Draw Mode -->
-            <button id="drawModeToggle" class="theme-toggle-btn"
-                title="Draw Mode — paste raw text and map it to table cells">
-                <i class="fas fa-pencil-alt"></i>
+            <!-- Lab Mode -->
+            <button id="labModeToggle" class="theme-toggle-btn"
+                title="Lab Mode — validate, transform &amp; analyze table data">
+                <i class="fas fa-flask"></i>
             </button>
 
             <!-- Node Editor -->
@@ -520,71 +521,63 @@
                 </div>
             </div>
 
-            <!-- Draw Canvas (shown when Draw Mode is active, covers table view) -->
-            <div id="drawCanvas" class="draw-canvas">
+            <!-- Lab Canvas (shown when Lab Mode is active, covers table view) -->
+            <div id="labCanvas" class="draw-canvas">
                 <div class="draw-canvas-header">
-                    <span><i class="fas fa-pencil-alt"></i> Draw Mode; paste raw data, select text, mark as Header /
-                        Column / Row</span>
+                    <span><i class="fas fa-flask"></i> Lab Mode &mdash; validate, transform &amp; analyze table data</span>
                     <div class="draw-canvas-header-actions">
-                        <button id="drawClearAll" class="btn btn-sm btn-outline-danger" title="Clear all">
+                        <button id="labClearAll" class="btn btn-sm btn-outline-danger" title="Clear pipeline">
                             <i class="fas fa-trash"></i> Clear
                         </button>
-                        <button id="exitDrawMode" class="btn btn-sm btn-outline-secondary">Exit</button>
+                        <button id="exitLabMode" class="btn btn-sm btn-outline-secondary">Exit</button>
                     </div>
                 </div>
-                <div class="draw-canvas-body">
-                    <!-- Monaco editor replaces textarea -->
-                    <div id="monaco-draw-container" class="draw-monaco-container"></div>
-                    <!-- Fallback textarea when Monaco is unavailable -->
-                    <textarea id="drawInput" class="draw-input" style="display:none;"
-                        placeholder="Paste or type raw data here. Select text, then use the buttons below to mark headers, columns, and rows."></textarea>
-                    <!-- Drag-resize splitter -->
-                    <div id="drawResizeHandle" class="draw-resize-handle" title="Drag to resize editor"></div>
-                    <div class="draw-canvas-toolbar" style="flex-wrap: wrap; gap: 8px;">
-                        <span class="draw-toolbar-hint">Grid Size:</span>
-                        <input type="number" id="drawGridCols" value="3" min="1" max="100"
-                            class="form-control form-control-sm"
-                            style="width:50px; height:24px; padding:2px 4px; font-size:11px;" title="Columns">
-                        <span style="font-size:11px; color:var(--t-text-muted);">x</span>
-                        <input type="number" id="drawGridRows" value="3" min="1" max="1000"
-                            class="form-control form-control-sm"
-                            style="width:50px; height:24px; padding:2px 4px; font-size:11px;" title="Rows">
-                        <button id="drawApplySize" class="btn btn-sm btn-outline-secondary"
-                            style="height:24px; line-height:1; padding:2px 6px;">Set Grid</button>
-
-                        <div class="input-toolbar-divider" style="height:16px;"></div>
-
-                        <span class="draw-toolbar-hint">Auto-Advance:</span>
-                        <select id="drawAutoAdvance" class="form-control form-control-sm"
-                            style="width: auto; height:24px; padding:2px 4px; font-size:11px;">
-                            <option value="right">Right (Row)</option>
-                            <option value="down">Down (Col)</option>
-                            <option value="none">None</option>
-                        </select>
-
-                        <div class="input-toolbar-divider" style="height:16px;"></div>
-
-                        <button id="drawPaintModeToggle" class="btn btn-sm btn-outline-warning"
-                            title="Toggle Paint Brush Mode" style="height:24px; line-height:1; padding:2px 8px;">
-                            <i class="fas fa-paint-brush"></i> Paint: OFF
-                        </button>
-
-                        <button id="drawInsertSelected" class="btn btn-sm btn-primary"
-                            title="Insert selected text into grid starting at active cell"
-                            style="height:24px; line-height:1; padding:2px 8px;">
-                            <i class="fas fa-level-down-alt"></i> Insert Selected
-                        </button>
-
-                        <div style="flex:1;"></div>
-                        <button id="drawBuildTable" class="btn btn-sm btn-success"
-                            title="Generate the HTML table from the drawn structure">
-                            <i class="fas fa-table"></i> Build Table
-                        </button>
+                <div class="draw-canvas-body" id="lab-canvas-body">
+                    <!-- TOP PANE: step builder -->
+                    <div class="lab-step-pane">
+                        <!-- Mode tabs + action buttons -->
+                        <div class="lab-tab-bar">
+                            <button class="lab-tab active" data-mode="validate">Validate</button>
+                            <button class="lab-tab" data-mode="transform">Transform</button>
+                            <button class="lab-tab" data-mode="analyze">Analyze</button>
+                            <div class="lab-tab-spacer"></div>
+                            <button id="labRecipeToggle" class="btn btn-xs btn-outline-secondary lab-recipe-btn">Recipe ▾</button>
+                            <button id="labRunBtn" class="btn btn-sm btn-primary lab-run-btn">
+                                <i class="fas fa-play"></i> Run
+                            </button>
+                        </div>
+                        <!-- Function picker (inline, hidden by default) -->
+                        <div id="labFnPicker" class="lab-fn-picker" style="display:none;"></div>
+                        <!-- Step list (scrollable) -->
+                        <div id="labStepList" class="lab-step-list">
+                            <div class="lab-step-empty">No steps yet &mdash; click <strong>+ Add Step</strong> to begin.</div>
+                        </div>
+                        <!-- Add Step bar -->
+                        <div class="lab-add-step-bar">
+                            <button id="labAddStep" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-plus"></i> Add Step
+                            </button>
+                        </div>
+                        <!-- Recipe section: Monaco read-only (hidden by default) -->
+                        <div id="labRecipeSection" class="lab-recipe-section" style="display:none;">
+                            <div id="monaco-draw-container" class="draw-monaco-container lab-recipe-monaco"></div>
+                        </div>
                     </div>
+                    <!-- Drag-resize splitter (same ID — resize JS reuses it) -->
+                    <div id="drawResizeHandle" class="draw-resize-handle" title="Drag to resize"></div>
+                    <!-- BOTTOM PANE: result -->
                     <div class="draw-preview">
-                        <div class="draw-preview-label">Structure Preview</div>
-                        <div id="drawPreviewContent" class="draw-preview-content">
-                            <em style="font-size:11px;">No cells marked yet</em>
+                        <div class="draw-preview-label">
+                            Result
+                            <span id="labResultBadge" class="lab-result-badge" style="display:none;"></span>
+                        </div>
+                        <div id="labResultContent" class="draw-preview-content">
+                            <em style="font-size:11px; color:var(--t-text-muted);">Run a pipeline to see results</em>
+                        </div>
+                        <div id="labSubmitRow" class="lab-submit-row" style="display:none;">
+                            <button id="labSubmitBtn" class="btn btn-sm btn-success">
+                                <i class="fas fa-table"></i> Submit &rarr; New Sheet
+                            </button>
                         </div>
                     </div>
                 </div>

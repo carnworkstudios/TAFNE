@@ -1114,6 +1114,478 @@ body.draw-mode-active .table-wrapper {
 }
 
 /* ===========================
+   LAB MODE
+   =========================== */
+
+/* Show center panel as flex column when Lab is active */
+body.lab-mode-active .tifany-center-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Toolbar button active state */
+body.lab-mode-active #labModeToggle {
+    background: var(--t-active-bg);
+    color: var(--t-primary);
+    border-color: var(--t-primary);
+}
+
+/* ── Top pane: step builder ─────────────────────────────────────────────── */
+
+.lab-step-pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--t-bg-surface);
+}
+
+/* Tab bar row */
+.lab-tab-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--t-border);
+    background: var(--t-bg-surface);
+    flex-shrink: 0;
+}
+
+.lab-tab {
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--t-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--t-text-muted);
+    cursor: pointer;
+    transition: all 140ms ease;
+    text-transform: capitalize;
+}
+
+.lab-tab:hover {
+    background: var(--t-hover-bg);
+    color: var(--t-text);
+}
+
+.lab-tab.active {
+    background: var(--t-active-bg);
+    color: var(--t-primary);
+    border-color: var(--t-primary);
+}
+
+.lab-tab-spacer { flex: 1; }
+
+.lab-recipe-btn {
+    font-size: 11px;
+    padding: 2px 8px;
+    height: 24px;
+    line-height: 1;
+}
+
+.lab-run-btn {
+    font-size: 11px;
+    padding: 2px 10px;
+    height: 24px;
+    line-height: 1;
+}
+
+/* ── Function picker ────────────────────────────────────────────────────── */
+
+.lab-fn-picker {
+    background: var(--t-bg-surface);
+    border-bottom: 1px solid var(--t-border);
+    padding: 8px 10px;
+    max-height: 220px;
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+.lab-picker-inner {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.lab-picker-group {
+    min-width: 140px;
+}
+
+.lab-picker-group-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--t-text-muted);
+    margin-bottom: 4px;
+    padding: 0 2px;
+}
+
+.lab-picker-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 4px 8px;
+    font-size: 11px;
+    background: transparent;
+    border: 1px solid var(--t-border);
+    border-radius: 4px;
+    color: var(--t-text);
+    cursor: pointer;
+    margin-bottom: 2px;
+    transition: background 120ms ease;
+}
+
+.lab-picker-item:hover:not([disabled]) {
+    background: var(--t-active-bg);
+    color: var(--t-primary);
+    border-color: var(--t-primary);
+}
+
+.lab-picker-validate .lab-picker-item { border-left: 3px solid #dc3545; }
+.lab-picker-transform .lab-picker-item { border-left: 3px solid #0d6efd; }
+.lab-picker-analyze   .lab-picker-item { border-left: 3px solid #198754; }
+
+.lab-picker-cloud .lab-picker-item,
+.lab-picker-item[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+    font-style: italic;
+}
+
+/* ── Step list ──────────────────────────────────────────────────────────── */
+
+.lab-step-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 6px 10px;
+}
+
+.lab-step-empty {
+    font-size: 11px;
+    color: var(--t-text-muted);
+    font-style: italic;
+    padding: 10px 0;
+}
+
+.lab-step-card {
+    border: 1px solid var(--t-border);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    background: var(--t-bg-workspace);
+    overflow: hidden;
+}
+
+.lab-step-card-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    background: var(--t-bg-surface);
+    border-bottom: 1px solid var(--t-border);
+}
+
+.lab-step-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--t-text-muted);
+    min-width: 14px;
+}
+
+.lab-step-badge {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+.lab-badge-validate { background: rgba(220,53,69,0.12); color: #dc3545; }
+.lab-badge-transform { background: rgba(13,110,253,0.12); color: #0d6efd; }
+.lab-badge-analyze  { background: rgba(25,135,84,0.12);  color: #198754; }
+
+.lab-step-label {
+    font-size: 11px;
+    color: var(--t-text);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lab-step-actions {
+    display: flex;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.lab-step-btn {
+    background: transparent;
+    border: 1px solid var(--t-border);
+    border-radius: 3px;
+    font-size: 11px;
+    padding: 1px 5px;
+    color: var(--t-text-muted);
+    cursor: pointer;
+    line-height: 1.4;
+    transition: all 120ms ease;
+}
+
+.lab-step-btn:hover:not([disabled]) {
+    background: var(--t-hover-bg);
+    color: var(--t-text);
+}
+
+.lab-step-btn[disabled] { opacity: 0.3; cursor: default; }
+
+.lab-step-remove:hover:not([disabled]) {
+    background: rgba(220,53,69,0.1);
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+/* ── Param forms ────────────────────────────────────────────────────────── */
+
+.lab-step-params {
+    padding: 8px 10px;
+}
+
+.lab-param-grid {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 4px 8px;
+    align-items: center;
+}
+
+.lab-param-label {
+    font-size: 10px;
+    color: var(--t-text-muted);
+    font-weight: 500;
+    text-align: right;
+    padding-right: 4px;
+    white-space: nowrap;
+}
+
+.lab-sublabel {
+    font-size: 9px;
+    color: var(--t-text-muted);
+    margin-top: 4px;
+}
+
+.lab-param-input {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.lab-input {
+    font-size: 11px;
+    padding: 3px 6px;
+    border: 1px solid var(--t-border);
+    border-radius: 4px;
+    background: var(--t-bg-input);
+    color: var(--t-text);
+    width: 100%;
+    box-sizing: border-box;
+    height: 26px;
+}
+
+.lab-input:focus {
+    outline: none;
+    border-color: var(--t-primary);
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+}
+
+.lab-input-num { width: 90px; }
+.lab-input-xs  { height: 22px; font-size: 10px; padding: 1px 4px; }
+
+.lab-custom-term { margin-top: 4px; }
+
+.lab-expr-sub {
+    display: contents; /* slots sub-labels/inputs into the parent grid */
+}
+
+.lab-hint {
+    font-size: 10px;
+    color: var(--t-text-muted);
+    font-style: italic;
+}
+
+/* expr sub-fields: compact vertical rows below the type select */
+.lab-expr-sub {
+    margin-top: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.lab-expr-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.lab-expr-label {
+    font-size: 10px;
+    color: var(--t-text-muted);
+    white-space: nowrap;
+    width: 50px;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+/* mergeBy rules */
+.lab-rule-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+}
+.lab-rule-col {
+    font-size: 10px;
+    color: var(--t-text);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* multiAggregate measures */
+.lab-measures-rows { margin-bottom: 4px; }
+.lab-measure-row { display: flex; gap: 4px; margin-bottom: 3px; }
+.lab-add-measure { font-size: 10px; padding: 2px 6px; }
+
+/* ── Add Step bar ───────────────────────────────────────────────────────── */
+
+.lab-add-step-bar {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    border-top: 1px solid var(--t-border);
+    background: var(--t-bg-surface);
+}
+
+/* ── Recipe section ─────────────────────────────────────────────────────── */
+
+.lab-recipe-section {
+    flex-shrink: 0;
+    border-top: 1px solid var(--t-border);
+}
+
+.lab-recipe-monaco {
+    height: 110px !important;
+    flex: none !important;
+}
+
+/* ── Result pane ────────────────────────────────────────────────────────── */
+
+.lab-result-badge {
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+    display: inline;
+}
+
+/* Result table */
+.lab-result-table {
+    border-collapse: collapse;
+    font-size: 11px;
+    width: 100%;
+    table-layout: auto;
+}
+
+.lab-result-table th {
+    background: var(--t-bg-surface);
+    border: 1px solid var(--t-border);
+    padding: 3px 8px;
+    font-weight: 600;
+    color: var(--t-text);
+    text-align: left;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.lab-result-table td {
+    border: 1px solid var(--t-border);
+    padding: 2px 8px;
+    color: var(--t-text);
+    background: var(--t-bg-workspace);
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Flagged row styles */
+.lab-row-error > td:first-child { border-left: 3px solid #dc3545; }
+.lab-row-warn  > td:first-child { border-left: 3px solid #ffc107; }
+.lab-row-error { background: rgba(220,53,69,0.04) !important; }
+.lab-row-warn  { background: rgba(255,193,7,0.06) !important; }
+
+.lab-flag-col { min-width: 120px; max-width: 300px; }
+.lab-flag-badge {
+    display: inline-block;
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin: 1px;
+    white-space: normal;
+    word-break: break-word;
+}
+.lab-flag-error { background: rgba(220,53,69,0.12); color: #dc3545; }
+.lab-flag-warn  { background: rgba(255,193,7,0.15);  color: #856404; }
+
+/* Stat cards */
+.lab-stat-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+}
+
+.lab-stat-card {
+    background: var(--t-bg-surface);
+    border: 1px solid var(--t-border);
+    border-radius: 8px;
+    padding: 16px 24px;
+    text-align: center;
+    min-width: 120px;
+}
+
+.lab-stat-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--t-primary);
+    line-height: 1.2;
+}
+
+.lab-stat-label {
+    font-size: 11px;
+    color: var(--t-text-muted);
+    margin-top: 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ── Submit row ─────────────────────────────────────────────────────────── */
+
+.lab-submit-row {
+    padding: 8px 10px;
+    border-top: 1px solid var(--t-border);
+    background: var(--t-bg-surface);
+    flex-shrink: 0;
+}
+
+/* ===========================
    NODE EDITOR MODE
    =========================== */
 

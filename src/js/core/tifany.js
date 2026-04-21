@@ -16,7 +16,7 @@ $(function () {
     window.popperInstance = null;
     window.hideTimeout = null;
     window.lastParsedHtml = null;
-    window.drawModeEnabled = false;
+    window.labModeEnabled = false;
     window.nodeEditorEnabled = false;
     // True while a table cell has been most recently clicked/interacted with.
     // Used to gate copy/paste shortcuts without relying on document.activeElement
@@ -812,9 +812,9 @@ $(function () {
         });
     })();
 
-    // =================== DRAW MODE TOGGLE ===================
-    $('#drawModeToggle').on('click', function () {
-        if (typeof toggleDrawMode === 'function') toggleDrawMode();
+    // =================== LAB MODE TOGGLE ===================
+    $('#labModeToggle').on('click', function () {
+        if (typeof toggleLab === 'function') toggleLab();
     });
 
     // =================== NODE EDITOR TOGGLE ===================
@@ -822,8 +822,8 @@ $(function () {
 
     // Select tool toggle (visual only; normal mode indicator)
     $('#selectToolToggle').on('click', function () {
-        if (window.drawModeEnabled && typeof disableDrawMode === 'function') {
-            disableDrawMode();
+        if (window.labModeEnabled && typeof disableLab === 'function') {
+            disableLab();
         }
         if (window.nodeEditorEnabled && typeof disableNodeEditor === 'function') {
             disableNodeEditor();
@@ -894,8 +894,8 @@ $(function () {
         if (typeof parseInput === 'function') parseInput();
     });
 
-    // =================== DRAW CANVAS INIT ===================
-    if (typeof initDrawCanvas === 'function') initDrawCanvas();
+    // =================== LAB CANVAS INIT ===================
+    if (typeof initLabCanvas === 'function') initLabCanvas();
 
     // =================== NODE EDITOR INIT ===================
     if (typeof initNodeEditor === 'function') initNodeEditor();
