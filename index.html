@@ -162,6 +162,9 @@
     <link rel="stylesheet" href="src/css/tableEditor.css">
     <link rel="stylesheet" href="src/css/tifanyUI.css">
     <link rel="stylesheet" href="src/css/nodeEditor.css">
+    <!-- GINEXYS Gate + Star Nudge -->
+    <link rel="stylesheet" href="/assets/css/ginexys-modals.css">
+    <script src="/assets/js/ginexys-gate.js" defer></script>
     <!-- Shared portfolio CSS (header/logo styles) -->
     <link rel="stylesheet" href="../../assets/css/portfolio.css">
 
@@ -1107,9 +1110,6 @@
                 try {
                     var count = parseInt(localStorage.getItem('tifany_gen_count') || '0', 10) + 1;
                     localStorage.setItem('tifany_gen_count', String(count));
-                } catch (e) { }
-                try {
-                    navigator.sendBeacon('/_api/usage', JSON.stringify({ tool: 'tifany', event: 'generate' }));
                 } catch (e) { }
             }
 
