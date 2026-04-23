@@ -432,6 +432,9 @@ $(function () {
 
         // Double click to edit cell
         $container.off('dblclick.cell').on('dblclick.cell', 'td, th', function (e) {
+            //SAVE STATE BEFORE OPERATION
+            window.saveCurrentState();
+
             window.cellBeingEdited = this;
             window.originalContent = $(this).html();
 
@@ -458,6 +461,97 @@ $(function () {
             });
 
             e.stopPropagation();
+        });
+
+        // Double click to rename tab labels — overlay input, never nest inside button
+        $container.off('dblclick.tabLabel').on('dblclick.tabLabel', '.sp-option', function (e) {
+            //SAVE STATE BEFORE OPERATION
+            window.saveCurrentState();
+
+            e.stopPropagation();
+            const $btn = $(this);
+            if ($btn.find('.tab-label-editor').length) return;
+
+            const originalText = $btn.text().trim();
+            const btnOffset = $btn.offset();
+            const containerOffset = $container.offset();
+
+            const $input = $('<input type="text">')
+                .addClass('tab-label-editor')
+                .val(originalText)
+                .css({
+                    position: 'absolute',
+                    top: btnOffset.top - containerOffset.top,
+                    left: btnOffset.left - containerOffset.left,
+                    width: $btn.outerWidth(),
+                    height: $btn.outerHeight(),
+                    zIndex: 1000,
+                    fontSize: $btn.css('font-size'),
+                    textAlign: 'center',
+                    boxSizing: 'border-box',
+                    padding: '0 4px'
+                });
+
+            $container.css('position', 'relative').append($input);
+            $input.focus().select();
+
+            function commit() {
+                const val = $input.val().trim() || originalText;
+                $btn.text(val);
+                $input.remove();
+                window.saveCurrentState();
+            }
+
+            $input.on('blur', commit).on('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                if (e.key === 'Escape') { $input.remove(); }
+            });
+        });
+
+        // Double click to rename accordion table headings
+        $container.off('click.tableHeading').on('click.tableHeading', 'button.accordion', function (e) {
+            //SAVE STATE BEFORE OPERATION
+            window.saveCurrentState();
+
+            e.stopPropagation();
+            const $btn = $(this);
+            const $label = $btn.find('b');
+            if (!$label.length) return;
+
+            const originalText = $label.text().trim();
+            const btnOffset = $btn.offset();
+            const containerOffset = $container.offset();
+
+            const $input = $('<input type="text">')
+                .addClass('tab-label-editor')
+                .val(originalText)
+                .css({
+                    position: 'absolute',
+                    top: btnOffset.top - containerOffset.top,
+                    left: btnOffset.left - containerOffset.left,
+                    width: $btn.outerWidth(),
+                    height: $btn.outerHeight(),
+                    zIndex: 1000,
+                    fontSize: $btn.css('font-size'),
+                    fontWeight: 'bold',
+                    boxSizing: 'border-box',
+                    padding: '0 8px'
+                });
+
+            $container.css('position', 'relative').append($input);
+            $input.focus().select();
+
+            function commit() {
+                const val = $input.val().trim() || originalText;
+                $label.text(val);
+                $input.remove();
+                window.saveCurrentState();
+            }
+
+            $input.on('blur', commit).on('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                if (e.key === 'Escape') { $input.remove(); }
+            });
         });
 
         // Click elsewhere to save

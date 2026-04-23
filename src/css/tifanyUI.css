@@ -429,7 +429,22 @@ body {
    =========================== */
 .panel {
     display: none;
+    border-radius: 10px;
     overflow: auto;
+    
+}
+
+#tableContainer .panel {
+    border: 1px solid #d1d5db;
+    border-top: none;
+    border-radius: 0 0 14px 14px;
+    box-shadow:
+        0 1px 3px rgba(0,0,0,0.06),
+        0 4px 16px rgba(0,0,0,0.04);
+    background: var(--t-bg-surface);
+    padding: 0;
+    margin-bottom: 16px;
+    max-width: 960px;
 }
 
 /* Left panel sections start expanded and stay persistent (not reset on table reload) */

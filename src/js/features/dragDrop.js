@@ -82,6 +82,9 @@
     // ===================================================================
 
     function startCellDrag(cell, e) {
+        //SAVE STATE BEFORE OPERATION
+            window.saveCurrentState();
+
         e.preventDefault();
         e.stopPropagation();
 
@@ -110,6 +113,9 @@
     }
 
     function startRowDrag(row, e) {
+        //SAVE STATE BEFORE OPERATION
+            window.saveCurrentState();
+
         e.preventDefault();
         e.stopPropagation();
 
@@ -135,6 +141,9 @@
     let colDropTarget = -1; // tracks the target column index during column drag
 
     function startColumnDrag(colIndex, e) {
+        //SAVE STATE BEFORE OPERATION
+            window.saveCurrentState();
+
         e.preventDefault();
         e.stopPropagation();
 
@@ -203,6 +212,9 @@
 
         // On mouseup anywhere, perform the column move
         $(document).one('mouseup.drag', function () {
+            //SAVE STATE BEFORE OPERATION
+            window.saveCurrentState();
+
             $(document).off('mousemove.coldrag');
             if (colDropTarget >= 0 && colDropTarget !== colIndex) {
                 console.log('moveColumn called from', draggedElement, 'to', colDropTarget);
@@ -218,6 +230,9 @@
     // ===================================================================
 
     function swapCells(cell1, cell2) {
+        //SAVE STATE BEFORE OPERATION
+            window.saveCurrentState();
+            
         const $cell1 = $(cell1);
         const $cell2 = $(cell2);
 
@@ -229,11 +244,17 @@
     }
 
     function moveRow(draggedRow, indicator) {
+        //SAVE STATE BEFORE OPERATION
+            window.saveCurrentState();
+
         console.log('moveRow called from', indicator, 'to', draggedRow);
         $(indicator).after(draggedRow);
     }
 
     function moveColumn(fromIndex, toIndex) {
+        //SAVE STATE BEFORE OPERATION
+            window.saveCurrentState();
+
         if (fromIndex === toIndex || fromIndex + 1 === toIndex) { // no-op if identical or adjacent same spot
             endDrag();
             return;

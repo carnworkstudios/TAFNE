@@ -234,16 +234,16 @@
                 <i class="fas fa-table"></i>
             </button>
 
-            <!-- Lab Mode -->
-            <button id="labModeToggle" class="theme-toggle-btn"
-                title="Lab Mode — validate, transform &amp; analyze table data">
-                <i class="fas fa-flask"></i>
-            </button>
-
             <!-- Node Editor -->
             <button id="nodeEditorToggle" class="theme-toggle-btn"
                 title="Node Editor — build data pipelines with joins, filters and transforms">
                 <i class="fas fa-project-diagram"></i>
+            </button>
+
+            <!-- Lab Mode -->
+            <button id="labModeToggle" class="theme-toggle-btn"
+                title="Lab Mode — validate, transform &amp; analyze table data">
+                <i class="fas fa-database"></i>
             </button>
 
             <!-- CWS: back-annotate to Schema Editor (hidden when standalone) -->
@@ -612,7 +612,7 @@
             <div class="table-wrapper">
                 <!-- contenteditable="true" -->
                 <p contenteditable="true" data-text="Table View" class="text-center"></p>
-                <div class="table-container" id="tableContainer" contenteditable="true"></div>
+                <div class="table-container" id="tableContainer"></div>
             </div>
 
             <!-- Sheet tab bar -->

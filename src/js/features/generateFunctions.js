@@ -1,43 +1,42 @@
 function generateTabs(tableHtml) {
-    // Get the number of tabs to generate; default to 1 if empty
     let buttonIndex = parseInt($('#buttonIndex').val());
-    if (isNaN(buttonIndex) || buttonIndex < 1) {
-        buttonIndex = 1;
-        $('#buttonIndex').val(1);
-    }
-    if (buttonIndex > 100) {
-        buttonIndex = 100;
-        $('#buttonIndex').val(100);
-    }
+    if (isNaN(buttonIndex) || buttonIndex < 1) { buttonIndex = 1; $('#buttonIndex').val(1); }
+    if (buttonIndex > 100) { buttonIndex = 100; $('#buttonIndex').val(100); }
 
-    // Create tabs container if it doesn't exist
-    if ($('#tableContainer .panel').length === 0) {
-        $('#tableContainer').prepend('<button class="accordion active"><b>Table Heading</b></button>' + '<div class="panel">');
-    }
+    window.saveCurrentState();
 
-    // Generate the tabs HTML
-    let tabsHtml = '<div class="sp-selector">\n';
-    for (let i = 1; i <= buttonIndex; i++) {
-        tabsHtml += `<button class="sp-option" data-value="${i}" data-panel="0">${i}</button>\n`;
+    // Parse input and find every <table> — each gets its own card
+    const $parsed = $('<div>').html(tableHtml);
+    const $tables = $parsed.find('table');
+
+    if ($tables.length === 0) {
+        $('#tableContainer').html(tableHtml);
+        setupTableInteraction();
+        return;
     }
 
-    tabsHtml += '</div><br>';
+    let blocksHtml = '';
 
-    // Combine tabs HTML with table HTML
-    const panelHtml = tabsHtml + tableHtml;
+    $tables.each(function (i) {
+        $(this).attr('data-tifany-id', `t-${i}`);
 
-    // Add tabs to the tabs container
-    $('#tableContainer .panel').html(panelHtml);
-
-    // Assign unique data-tifany-id to each table for multi-table tracking
-    $('#tableContainer table').each(function (i) {
-        if (!$(this).attr('data-tifany-id')) {
-            $(this).attr('data-tifany-id', `t-${i}`);
+        let spHtml = '<div class="sp-selector">\n';
+        for (let j = 1; j <= buttonIndex; j++) {
+            spHtml += `  <button class="sp-option" data-value="${j}" data-panel="${i}">${j}</button>\n`;
         }
+        spHtml += '</div><br>';
+
+        const tableOuterHtml = $('<div>').append($(this).clone()).html();
+
+        blocksHtml +=
+            `<button class="accordion active"><b>Table ${i + 1}</b></button>` +
+            `<div class="panel">${spHtml}${tableOuterHtml}</div>`;
     });
 
+    $('#tableContainer').html(blocksHtml);
+
     setupTableInteraction();
-    console.log(`Generated ${buttonIndex} tabs`);
+    console.log(`Generated ${buttonIndex} tab(s) across ${$tables.length} table(s)`);
     $.toast({ heading: 'Done', text: `Generated ${buttonIndex} tabs`, icon: 'success', loader: false, stack: false });
 }
 
@@ -108,7 +107,7 @@ function exportAsHtml() {
     $clone.removeAttr('style');
     $clone.find('td, th, tr').removeClass('selected-cell');
     $clone.find('.text-center.p-5:has(p:contains("Table View"))').remove();
-    $clone.find('td').removeAttr('style');
+    // $clone.find('td').removeAttr('style');
 
     return formatHtml($('<div>').append($clone).html());
 }

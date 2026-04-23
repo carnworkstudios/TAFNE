@@ -881,7 +881,7 @@ function _labRenderPicker() {
     html += '<div class="lab-picker-group">' +
         '<div class="lab-picker-group-label">cloud</div>' +
         '<button class="lab-picker-item lab-picker-cloud" disabled>' +
-        '☁ Custom Script <em>(GINEXYS OS Cloud)</em>' +
+        '☁ Custom Script <em>(GINEXYS Cloud)</em>' +
         '</button>' +
         '</div>';
 
