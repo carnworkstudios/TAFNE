@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Table Formatter Modes — Table Mode, Node Editor, Lab Mode | GINEXYS</title>
+<meta name="description" content="Overview of all modes in GINEXYS Table Formatter: Table Mode for visual editing, Draw Mode for converting raw text to tables, Node Editor for data pipelines, and Lab Mode for validation and analysis.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://ginexys.com/tools/table-formatter/docs/modes/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Table Formatter Modes — Table Mode, Node Editor, Lab Mode | GINEXYS">
+<meta property="og:description" content="Overview of all modes in GINEXYS Table Formatter: Table Mode for visual editing, Draw Mode for converting raw text to tables, Node Editor for data pipelines, and Lab Mode for validation and analysis.">
+<meta property="og:url" content="https://ginexys.com/tools/table-formatter/docs/modes/">
+<meta property="og:site_name" content="GINEXYS">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Table Formatter Modes — Table Mode, Node Editor, Lab Mode",
+      "description": "Overview of all modes in GINEXYS Table Formatter: Table Mode for visual editing, Draw Mode for converting raw text to tables, Node Editor for data pipelines, and Lab Mode for validation and analysis.",
+      "url": "https://ginexys.com/tools/table-formatter/docs/modes/",
+      "isPartOf": {
+        "@type": "WebApplication",
+        "name": "Table Formatter",
+        "url": "https://ginexys.com/tools/table-formatter/"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "GINEXYS",
+        "url": "https://ginexys.com"
+      },
+      "dateModified": "2026-04-25"
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "GINEXYS",
+          "item": "https://ginexys.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Tools",
+          "item": "https://ginexys.com/tools/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Table Formatter",
+          "item": "https://ginexys.com/tools/table-formatter/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 4,
+          "name": "Docs",
+          "item": "https://ginexys.com/tools/table-formatter/docs/getting-started.html"
+        },
+        {
+          "@type": "ListItem",
+          "position": 5,
+          "name": "Modes"
+        }
+      ]
+    }
+  ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>:root { --bg:#0b1018;--bg-r:#0f1720;--bg-o:#162030;--br:#1e3348;--br-s:#2a4a66;--ac:#c9a84c;--ac2:#00b4d8;--tx:#d8eaf8;--txs:#6a90b0;--txd:#354d63;--radius:6px; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--tx);font-family:'DM Mono','Courier New',monospace;font-size:13px;line-height:1.65;}
+  .gx-nav{height:44px;background:var(--bg-r);border-bottom:1px solid var(--br);display:flex;align-items:center;padding:0 20px;gap:0;position:sticky;top:0;z-index:10;}
+  .gx-breadcrumb{list-style:none;display:flex;align-items:center;gap:0;flex:1;min-width:0;overflow:hidden;}
+  .gx-breadcrumb li{display:flex;align-items:center;font-size:11px;letter-spacing:.05em;white-space:nowrap;color:var(--txd);}
+  .gx-breadcrumb li+li::before{content:'/';margin:0 6px;color:var(--txd);}
+  .gx-breadcrumb a{color:var(--txs);text-decoration:none;transition:color .15s;}
+  .gx-breadcrumb a:hover{color:var(--ac);}
+  .gx-breadcrumb li:last-child{color:var(--tx);overflow:hidden;text-overflow:ellipsis;}
+  .gx-open-btn{font-size:10px;letter-spacing:.08em;color:var(--txs);text-decoration:none;border:1px solid var(--br);border-radius:var(--radius);padding:4px 12px;white-space:nowrap;transition:border-color .15s,color .15s;flex-shrink:0;}
+  .gx-open-btn:hover{border-color:var(--ac);color:var(--ac);}
+  .gx-docs-wrap{max-width:760px;margin:0 auto;padding:36px 24px 80px;}
+  .gx-docs-content h1{font-size:24px;color:var(--tx);margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid var(--br);line-height:1.3;}
+  .gx-docs-content h2{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx);margin:28px 0 10px;padding-left:8px;border-left:2px solid var(--ac);}
+  .gx-docs-content h3{font-size:12px;color:var(--ac2);margin:18px 0 6px;}
+  .gx-docs-content h4{font-size:12px;color:var(--txs);margin:14px 0 4px;font-style:italic;}
+  .gx-docs-content p{color:var(--txs);margin-bottom:12px;line-height:1.8;}
+  .gx-docs-content ul,.gx-docs-content ol{margin:8px 0 14px 20px;color:var(--txs);}
+  .gx-docs-content li{margin-bottom:5px;line-height:1.7;}
+  .gx-docs-content strong{color:var(--tx);font-weight:500;}
+  .gx-docs-content em{color:var(--txs);font-style:italic;}
+  .gx-docs-content code{background:var(--bg-o);padding:1px 5px;border:1px solid var(--br);font-size:11px;color:var(--ac2);border-radius:3px;}
+  .gx-docs-content pre{background:var(--bg-o);border:1px solid var(--br);border-left:2px solid var(--ac);padding:14px 16px;margin:14px 0;overflow-x:auto;border-radius:var(--radius);}
+  .gx-docs-content pre code{background:none;border:none;padding:0;color:var(--txs);font-size:11px;line-height:1.65;}
+  .gx-docs-content blockquote{border-left:3px solid var(--ac);padding:10px 16px;background:rgba(201,168,76,.06);margin:14px 0;color:var(--txs);border-radius:0 var(--radius) var(--radius) 0;}
+  .gx-docs-content blockquote.note{border-left-color:var(--ac2);background:rgba(0,180,216,.06);}
+  .gx-docs-content hr{border:none;border-top:1px solid var(--br);margin:24px 0;}
+  .gx-docs-content a{color:var(--ac2);text-decoration:none;}
+  .gx-docs-content a:hover{text-decoration:underline;}
+  .gx-docs-content img{width:100%;border-radius:var(--radius);margin:12px 0;display:block;}
+  .gx-docs-content .table-wrap{overflow-x:auto;margin:14px 0;}
+  .gx-docs-content table{width:100%;border-collapse:collapse;font-size:12px;}
+  .gx-docs-content th{text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--txs);padding:8px 12px;border-bottom:1px solid var(--br);background:var(--bg-o);}
+  .gx-docs-content td{padding:7px 12px;border-bottom:1px solid var(--br);color:var(--txs);vertical-align:top;}
+  .gx-docs-related{margin-top:40px;padding-top:20px;border-top:1px solid var(--br);}
+  .gx-docs-related-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--txd);margin-bottom:10px;}
+  .gx-link-row{display:flex;flex-wrap:wrap;gap:8px;}
+  .gx-link-chip{font-size:11px;color:var(--txs);text-decoration:none;border:1px solid var(--br);border-radius:var(--radius);padding:5px 12px;transition:border-color .15s,color .15s;white-space:nowrap;}
+  .gx-link-chip:hover{border-color:var(--ac2);color:var(--ac2);}</style>
+</head>
+<body>
+<nav class="gx-nav" aria-label="Breadcrumb">
+  <ol class="gx-breadcrumb"><li><a href="/">GINEXYS</a></li><li><a href="/tools/">Tools</a></li><li><a href="/tools/table-formatter/">Table Formatter</a></li><li><a href="/tools/table-formatter/docs/getting-started.html">Docs</a></li><li aria-current="page">Modes</li></ol>
+  <a class="gx-open-btn" href="/tools/table-formatter/">Open Tool ↗</a>
+</nav>
+<div class="gx-docs-wrap">
+  <article class="gx-docs-content"><h1 id="operation-modes">Operation Modes</h1>
+<p>TIFANY provides three distinct modes of operation to handle different data manipulation and structural requirements. Use the sidebar icons to switch between these modes.</p>
+<hr>
+<h2 id="1-table-mode-standard">1. Table Mode (Standard)</h2>
+<p>The default mode for TIFANY. It provides a visual grid for direct manipulation of table data and structure.</p>
+<ul><li><strong>Best For</strong>: Direct editing, manual styling, merging cells, and quick structural adjustments.</li>
+<li><strong>Key Features</strong>:</li>
+<li><strong>Drag & Drop</strong>: Reorder rows and columns by dragging them.</li>
+<li><strong>Cell Selection</strong>: Advanced selection logic for single cells, rows, columns, or ranges.</li>
+<li><strong>Context Menu</strong>: Right-click access to most structural and content functions.</li>
+<li><strong>Live Rendering</strong>: Visual feedback as you apply styles and attributes.</li></ul>
+<hr>
+<h2 id="2-draw-mode-structure-builder">2. Draw Mode (Structure Builder)</h2>
+<p>Draw Mode is an innovative feature designed to convert unstructured raw data into a clean table structure.</p>
+<ul><li><strong>Best For</strong>: Parsing raw text, terminal outputs, or messy lists into a grid format.</li>
+<li><strong>Key Features</strong>:</li>
+<li><strong>Interactive Grid</strong>: A blank grid where you can place data elements.</li>
+<li><strong>Bulk Insert</strong>: Paste large blocks of text and insert them sequentially into the grid.</li>
+<li><strong>Paint Mode</strong>: Activate <strong>Paint Mode</strong> to select text fragments and instantly "drop" them into the active cell.</li>
+<li><strong>Auto-Advance</strong>: Configure the cursor to automatically move Right (Row) or Down (Column) after each insertion.</li>
+<li><strong>Grid Resizing</strong>: Dynamically adjust the number of rows and columns to fit your data.</li></ul>
+<h3 id="workflow">Workflow</h3>
+<ol><li>Enter <strong>Draw Mode</strong>.</li>
+<li>Paste raw text into the input editor.</li>
+<li>Set your desired Grid Size.</li>
+<li>Select text in the editor and select <strong>Insert Selected</strong> (or use Paint Mode).</li>
+<li>Once the structure is complete, select <strong>Build Table</strong> to generate the final sheet.</li></ol>
+<hr>
+<h2 id="3-node-editor-data-pipelines">3. Node Editor (Data Pipelines)</h2>
+<p>The Node Editor is a powerful visual scripting environment for building data processing pipelines.</p>
+<ul><li><strong>Best For</strong>: Complex data transformations, merging multiple tables, filtering large datasets, and performing automated calculations.</li>
+<li><strong>Key Features</strong>:</li>
+<li><strong>Visual Data Flow</strong>: Connect tables (source) to operators (process) via wires.</li>
+<li><strong>Operator Variety</strong>:</li>
+<li><strong>Filter</strong>: Keep rows matching specific conditions (equals, contains, regex, etc.).</li>
+<li><strong>Formula</strong>: Add computed columns using arithmetic, logic, and string functions.</li>
+<li><strong>Join</strong>: Perform relational merges (Inner, Left, Right, Full Outer) or simple stacking.</li>
+<li><strong>VLookup</strong>: Enrich data by pulling columns from reference tables.</li>
+<li><strong>API</strong>: Fetch live JSON data from external URLs.</li>
+<li><strong>Topological Execution</strong>: The engine automatically calculates the correct processing order.</li>
+<li><strong>Persistence</strong>: Your graph structure is saved automatically between sessions.</li></ul>
+<h3 id="workflow">Workflow</h3>
+<ol><li>Enter <strong>Node Editor</strong>.</li>
+<li>Imported sheets appear as <strong>Table Nodes</strong>.</li>
+<li>Add <strong>Operator Nodes</strong> via the toolbar or by right-clicking a port.</li>
+<li>Connect output ports to input ports.</li>
+<li>Configure operators (select the ⚙ icon).</li>
+<li>Select <strong>Run</strong> (▶) to execute the pipeline.</li>
+<li>Select a destination node and select <strong>Build Table</strong> to export the result.</li></ol>
+<blockquote class="note note">For detailed technical information on individual node types and formula syntax, see the <a href="node-editor-engine.md">Node Editor Engine Guide</a>.</blockquote></article>
+  <aside class="gx-docs-related">
+    <p class="gx-docs-related-label">Related</p>
+    <div class="gx-link-row"><a class="gx-link-chip" href="/tools/table-formatter/docs/getting-started.html">Getting Started</a>
+      <a class="gx-link-chip" href="/tools/table-formatter/docs/node-editor-engine/">Node Editor Engine</a>
+      <a class="gx-link-chip" href="/tools/table-formatter/docs/functions/">Functions Reference</a></div>
+  </aside>
+</div>
+</body>
+</html>

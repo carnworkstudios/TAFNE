@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Node Editor Engine — Visual Data Pipeline Reference | GINEXYS</title>
+<meta name="description" content="Technical reference for the GINEXYS Node Editor. How the execution engine works, adding Filter, Formula, Join, VLOOKUP, and API nodes, configuring operators, and state persistence.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://ginexys.com/tools/table-formatter/docs/node-editor-engine/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Node Editor Engine — Visual Data Pipeline Reference | GINEXYS">
+<meta property="og:description" content="Technical reference for the GINEXYS Node Editor. How the execution engine works, adding Filter, Formula, Join, VLOOKUP, and API nodes, configuring operators, and state persistence.">
+<meta property="og:url" content="https://ginexys.com/tools/table-formatter/docs/node-editor-engine/">
+<meta property="og:site_name" content="GINEXYS">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Node Editor Engine — Visual Data Pipeline Reference",
+      "description": "Technical reference for the GINEXYS Node Editor. How the execution engine works, adding Filter, Formula, Join, VLOOKUP, and API nodes, configuring operators, and state persistence.",
+      "url": "https://ginexys.com/tools/table-formatter/docs/node-editor-engine/",
+      "isPartOf": {
+        "@type": "WebApplication",
+        "name": "Table Formatter",
+        "url": "https://ginexys.com/tools/table-formatter/"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "GINEXYS",
+        "url": "https://ginexys.com"
+      },
+      "dateModified": "2026-04-25"
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "GINEXYS",
+          "item": "https://ginexys.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Tools",
+          "item": "https://ginexys.com/tools/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Table Formatter",
+          "item": "https://ginexys.com/tools/table-formatter/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 4,
+          "name": "Docs",
+          "item": "https://ginexys.com/tools/table-formatter/docs/getting-started.html"
+        },
+        {
+          "@type": "ListItem",
+          "position": 5,
+          "name": "Node Editor Engine"
+        }
+      ]
+    }
+  ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>:root { --bg:#0b1018;--bg-r:#0f1720;--bg-o:#162030;--br:#1e3348;--br-s:#2a4a66;--ac:#c9a84c;--ac2:#00b4d8;--tx:#d8eaf8;--txs:#6a90b0;--txd:#354d63;--radius:6px; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--tx);font-family:'DM Mono','Courier New',monospace;font-size:13px;line-height:1.65;}
+  .gx-nav{height:44px;background:var(--bg-r);border-bottom:1px solid var(--br);display:flex;align-items:center;padding:0 20px;gap:0;position:sticky;top:0;z-index:10;}
+  .gx-breadcrumb{list-style:none;display:flex;align-items:center;gap:0;flex:1;min-width:0;overflow:hidden;}
+  .gx-breadcrumb li{display:flex;align-items:center;font-size:11px;letter-spacing:.05em;white-space:nowrap;color:var(--txd);}
+  .gx-breadcrumb li+li::before{content:'/';margin:0 6px;color:var(--txd);}
+  .gx-breadcrumb a{color:var(--txs);text-decoration:none;transition:color .15s;}
+  .gx-breadcrumb a:hover{color:var(--ac);}
+  .gx-breadcrumb li:last-child{color:var(--tx);overflow:hidden;text-overflow:ellipsis;}
+  .gx-open-btn{font-size:10px;letter-spacing:.08em;color:var(--txs);text-decoration:none;border:1px solid var(--br);border-radius:var(--radius);padding:4px 12px;white-space:nowrap;transition:border-color .15s,color .15s;flex-shrink:0;}
+  .gx-open-btn:hover{border-color:var(--ac);color:var(--ac);}
+  .gx-docs-wrap{max-width:760px;margin:0 auto;padding:36px 24px 80px;}
+  .gx-docs-content h1{font-size:24px;color:var(--tx);margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid var(--br);line-height:1.3;}
+  .gx-docs-content h2{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx);margin:28px 0 10px;padding-left:8px;border-left:2px solid var(--ac);}
+  .gx-docs-content h3{font-size:12px;color:var(--ac2);margin:18px 0 6px;}
+  .gx-docs-content h4{font-size:12px;color:var(--txs);margin:14px 0 4px;font-style:italic;}
+  .gx-docs-content p{color:var(--txs);margin-bottom:12px;line-height:1.8;}
+  .gx-docs-content ul,.gx-docs-content ol{margin:8px 0 14px 20px;color:var(--txs);}
+  .gx-docs-content li{margin-bottom:5px;line-height:1.7;}
+  .gx-docs-content strong{color:var(--tx);font-weight:500;}
+  .gx-docs-content em{color:var(--txs);font-style:italic;}
+  .gx-docs-content code{background:var(--bg-o);padding:1px 5px;border:1px solid var(--br);font-size:11px;color:var(--ac2);border-radius:3px;}
+  .gx-docs-content pre{background:var(--bg-o);border:1px solid var(--br);border-left:2px solid var(--ac);padding:14px 16px;margin:14px 0;overflow-x:auto;border-radius:var(--radius);}
+  .gx-docs-content pre code{background:none;border:none;padding:0;color:var(--txs);font-size:11px;line-height:1.65;}
+  .gx-docs-content blockquote{border-left:3px solid var(--ac);padding:10px 16px;background:rgba(201,168,76,.06);margin:14px 0;color:var(--txs);border-radius:0 var(--radius) var(--radius) 0;}
+  .gx-docs-content blockquote.note{border-left-color:var(--ac2);background:rgba(0,180,216,.06);}
+  .gx-docs-content hr{border:none;border-top:1px solid var(--br);margin:24px 0;}
+  .gx-docs-content a{color:var(--ac2);text-decoration:none;}
+  .gx-docs-content a:hover{text-decoration:underline;}
+  .gx-docs-content img{width:100%;border-radius:var(--radius);margin:12px 0;display:block;}
+  .gx-docs-content .table-wrap{overflow-x:auto;margin:14px 0;}
+  .gx-docs-content table{width:100%;border-collapse:collapse;font-size:12px;}
+  .gx-docs-content th{text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--txs);padding:8px 12px;border-bottom:1px solid var(--br);background:var(--bg-o);}
+  .gx-docs-content td{padding:7px 12px;border-bottom:1px solid var(--br);color:var(--txs);vertical-align:top;}
+  .gx-docs-related{margin-top:40px;padding-top:20px;border-top:1px solid var(--br);}
+  .gx-docs-related-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--txd);margin-bottom:10px;}
+  .gx-link-row{display:flex;flex-wrap:wrap;gap:8px;}
+  .gx-link-chip{font-size:11px;color:var(--txs);text-decoration:none;border:1px solid var(--br);border-radius:var(--radius);padding:5px 12px;transition:border-color .15s,color .15s;white-space:nowrap;}
+  .gx-link-chip:hover{border-color:var(--ac2);color:var(--ac2);}</style>
+</head>
+<body>
+<nav class="gx-nav" aria-label="Breadcrumb">
+  <ol class="gx-breadcrumb"><li><a href="/">GINEXYS</a></li><li><a href="/tools/">Tools</a></li><li><a href="/tools/table-formatter/">Table Formatter</a></li><li><a href="/tools/table-formatter/docs/getting-started.html">Docs</a></li><li aria-current="page">Node Editor Engine</li></ol>
+  <a class="gx-open-btn" href="/tools/table-formatter/">Open Tool ↗</a>
+</nav>
+<div class="gx-docs-wrap">
+  <article class="gx-docs-content"><h1 id="node-editor-execution-engine-guide">Node Editor — Execution Engine Guide</h1>
+<h2 id="how-it-works-the-big-picture">How It Works (The Big Picture)</h2>
+<p>The Node Editor is a <strong>visual data pipeline</strong>. Data flows through connected nodes via wires:</p>
+<pre><code>[ Table Node ] ──wire──▶ [ Filter Node ] ──wire──▶ [ Formula Node ] ──wire──▶ [ Result ]</code></pre>
+<ol><li><strong>Table nodes</strong> load automatically from your imported sheets. They hold raw data and are the starting point for all pipelines.</li>
+<li><strong>Operator nodes</strong> (Filter, VLookup, Formula, Join, API) receive data through wires, transform it, and output the result.</li>
+<li>When you click <strong>▶ Run</strong>, the engine determines the correct execution order (topological sort), runs each operator in sequence, and populates output columns.</li></ol>
+<p><strong>Ports</strong> are the connection points on each node card:</p>
+<ul><li><strong>Blue dot (left side)</strong> = input port — data flows <strong>in</strong></li>
+<li><strong>Teal dot (right side)</strong> = output port — data flows <strong>out</strong></li></ul>
+<p>Drag from any teal output port to a blue input port to draw a wire. A wire from a Table node carries <strong>all of that table's columns</strong> into the operator — you don't need to wire every column individually.</p>
+<hr>
+<h2 id="workflow-summary">Workflow Summary</h2>
+<pre><code>1. Import a sheet → it appears as a Table node automatically
+2. Right-click any teal output port on a Table node → pick an operator to add + auto-wire
+   — OR — click "Add Node ▾" in the toolbar → pick an operator → manually drag a wire to it
+3. Wire connects: ⚙ button becomes active on the operator
+4. Click ⚙ → configure the operator → Save
+5. Click ▶ Run → operator nodes execute in pipeline order
+6. Optionally wire the output into another operator node to chain transforms
+7. Select any node → Build Table → export the result as a new sheet</code></pre>
+<hr>
+<h2 id="adding-operator-nodes-two-ways">Adding Operator Nodes — Two Ways</h2>
+<h3 id="option-1-right-click-a-port-recommended">Option 1 — Right-click a port (recommended)</h3>
+<p>Right-click any <strong>teal output port</strong> on a Table node. A context menu appears listing all operator types. Select one and the operator node is:</p>
+<ul><li>Placed to the right of the source node</li>
+<li>Automatically wired to the source</li>
+<li>⚙ immediately active — go straight to configuration</li></ul>
+<h3 id="option-2-add-node-palette">Option 2 — Add Node palette</h3>
+<p>Click <strong>Add Node ▾</strong> in the Node Editor toolbar. Select an operator type from the flyout. The node is placed at canvas center. <strong>You must then wire a Table node's output port to its input port</strong> before ⚙ becomes active.</p>
+<blockquote><strong>Why the ⚙ button is grayed out:</strong> Operator nodes need to know what columns are available before you can configure them. The ⚙ button unlocks as soon as at least one wire is connected to the node's input port.</blockquote>
+<hr>
+<h2 id="state-persistence">State Persistence</h2>
+<p>The Node Editor <strong>remembers your graph between sessions</strong>. When you switch away (Exit, Draw Mode, Select Tool) and come back, all nodes, wires, positions, and execution results are restored exactly as you left them.</p>
+<p>The first time you enter the Node Editor, your imported sheets are loaded as Table nodes. After that, the saved graph is always restored instead.</p>
+<hr>
+<h2 id="node-types">Node Types</h2>
+<hr>
+<h3 id="table-node-blue">Table Node  <code>⊞ blue</code></h3>
+<p><strong>What it is:</strong> A read-only view of an imported sheet. Every sheet you load appears as a Table node. It holds the raw data and acts as the starting point for all pipelines.</p>
+<p><strong>Ports:</strong> Each column header has both an input port (blue) and output port (teal).</p>
+<p><strong>No configuration needed.</strong> Double-click any cell value to edit it inline (copy-on-write — edits don't affect shared data).</p>
+<p><strong>Example:</strong></p>
+<pre><code>Sheet: "Sales"
+┌──────────────────────┐
+│ ▼  Sales      3 cols │
+├──────────────────────┤
+● Product    ●          ← blue = in port, teal = out port
+● Price      ●
+● Quantity   ●
+├──────────────────────┤
+│ Widget A   10   50   │
+│ Widget B   25   30   │
+│ Widget C   5    100  │
+└──────────────────────┘</code></pre>
+<hr>
+<h3 id="filter-node-amber">Filter Node  <code>⊟ amber</code></h3>
+<p><strong>What it does:</strong> Keeps only the rows that match a condition — all other rows are discarded. Like a SQL <code>WHERE</code> clause.</p>
+<p><strong>Input:</strong> Wire any output port from a Table node to the <strong>Input Table</strong> port. All columns from the source are available.</p>
+<p><strong>Output:</strong> The same columns, only the matching rows.</p>
+<h4 id="wiring-first">Wiring First</h4>
+<p>The Filter node has a single structural input port labeled <strong>Input Table</strong>. Wire a Table's teal port to this blue port. Once wired, ⚙ becomes active and all source columns appear in the dropdown.</p>
+<h4 id="configuration-fields">Configuration Fields</h4>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>What to put</th></tr></thead><tbody><tr><td><strong>Column to filter</strong></td><td>Which column to test. All wired-in source columns appear here.</td></tr><tr><td><strong>Operator</strong></td><td>How to compare the value (see table below).</td></tr><tr><td><strong>Value</strong></td><td>The value to compare against. For <code>regex</code> this is a regular expression.</td></tr></tbody></table></div>
+<h4 id="operators">Operators</h4>
+<div class="table-wrap"><table><thead><tr><th>Operator</th><th>Meaning</th><th>Example</th></tr></thead><tbody><tr><td><code>= equals</code></td><td>Exact match (numeric or text)</td><td>Price = <code>25</code></td></tr><tr><td><code>≠ not equals</code></td><td>Exclude exact match</td><td>Status ≠ <code>inactive</code></td></tr><tr><td><code>&gt; greater than</code></td><td>Numeric</td><td>Price > <code>20</code></td></tr><tr><td><code>&lt; less than</code></td><td>Numeric</td><td>Qty < <code>10</code></td></tr><tr><td><code>≥ &gt;=</code></td><td>Greater than or equal</td><td>Price >= <code>25</code></td></tr><tr><td><code>≤ &lt;=</code></td><td>Less than or equal</td><td>Price <= <code>10</code></td></tr><tr><td><code>contains</code></td><td>Text substring</td><td>Product contains <code>Widget</code></td></tr><tr><td><code>matches regex</code></td><td>Regular expression</td><td>Product matches <code>^Widget [AB]$</code></td></tr></tbody></table></div>
+<blockquote>If both the column value and your test value look like numbers, comparison is numeric. Otherwise text comparison is used.</blockquote>
+<h4 id="step-by-step-example">Step-by-Step Example</h4>
+<p>Goal: Keep only sales where Price > 10.</p>
+<ol><li>Right-click the <code>Price ●</code> port on the Sales table → select <strong>Filter</strong></li>
+<li>Filter node is placed and wired automatically</li>
+<li>Click ⚙:</li></ol>
+<ul><li><strong>Column:</strong> <code>Price</code></li>
+<li><strong>Operator:</strong> <code>&gt; greater than</code></li>
+<li><strong>Value:</strong> <code>10</code></li></ul>
+<ol><li>Click <strong>▶ Run</strong></li></ol>
+<p>Result: Filter output contains only rows where Price > 10.</p>
+<hr>
+<h3 id="vlookup-node-violet">VLookup Node  <code>⇄ violet</code></h3>
+<p><strong>What it does:</strong> Matches values in your pipeline against a key column in another table and pulls back a matching value. Like Excel VLOOKUP — key-based single-column enrichment.</p>
+<p><strong>Input:</strong> Wire a Table's output to the <strong>Input Table</strong> port. All source columns become available.</p>
+<p><strong>Output:</strong> All incoming columns, plus one new column containing the matched value.</p>
+<blockquote><strong>VLookup vs Join:</strong> VLookup pulls back a single column from a reference table. Join brings across all columns from both tables. Use VLookup when you only need one extra column; use Join when you need a full merge.</blockquote>
+<h4 id="configuration-fields">Configuration Fields</h4>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>What to put</th></tr></thead><tbody><tr><td><strong>Key column (incoming)</strong></td><td>The column in your data to search with (e.g. <code>ProductCode</code>).</td></tr><tr><td><strong>Reference node</strong></td><td>Which Table or operator node holds the lookup data.</td></tr><tr><td><strong>Ref key column</strong></td><td>The column in the reference table to match against.</td></tr><tr><td><strong>Ref value column</strong></td><td>The column in the reference table to pull back on a match.</td></tr><tr><td><strong>Output column label</strong></td><td>Name for the new column added to the output.</td></tr></tbody></table></div>
+<p>Only the first match is returned (exact match, like <code>VLOOKUP(..., FALSE)</code>). Unmatched rows get an empty cell.</p>
+<h4 id="step-by-step-example">Step-by-Step Example</h4>
+<p>Tables: <strong>Orders</strong> (<code>OrderID</code>, <code>ProductCode</code>, <code>Quantity</code>) and <strong>Products</strong> (<code>Code</code>, <code>ProductName</code>, <code>Price</code>)</p>
+<ol><li>Right-click <code>ProductCode ●</code> on Orders → <strong>VLookup</strong></li>
+<li>Click ⚙:</li></ol>
+<ul><li><strong>Key column:</strong> <code>ProductCode</code></li>
+<li><strong>Reference node:</strong> <code>Products</code></li>
+<li><strong>Ref key column:</strong> <code>Code</code></li>
+<li><strong>Ref value column:</strong> <code>ProductName</code></li>
+<li><strong>Output label:</strong> <code>Product Name</code></li></ul>
+<ol><li>Run ▶</li></ol>
+<p>Output: All Orders columns + <code>Product Name</code> column.</p>
+<hr>
+<h3 id="formula-node-green">Formula Node  <code>ƒ green</code></h3>
+<p><strong>What it does:</strong> Adds a new computed column by evaluating an expression row-by-row. Like adding a formula column in a spreadsheet.</p>
+<p><strong>Input:</strong> Wire a Table's output to the <strong>Input Table</strong> port. All source columns are available as <code>$ColumnName</code> references.</p>
+<p><strong>Output:</strong> All incoming columns, plus the new computed column.</p>
+<h4 id="configuration-fields">Configuration Fields</h4>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>What to put</th></tr></thead><tbody><tr><td><strong>Expression</strong></td><td>Formula using <code>$ColumnName</code> references.</td></tr><tr><td><strong>Output column label</strong></td><td>Name for the new computed column.</td></tr></tbody></table></div>
+<p>The config panel shows available column references as hints (e.g. <code>$Price</code> <code>$Qty</code>) once a source is wired in.</p>
+<h4 id="expression-syntax">Expression Syntax</h4>
+<pre><code>$Price       →  value of "Price" column for the current row
+$Qty         →  value of "Qty" column for the current row</code></pre>
+<p><strong>Arithmetic</strong></p>
+<pre><code>$Price * $Qty           multiply
+$Price + 5              add constant
+$Revenue / $Units       divide
+$Score ** 2             power (squared)
+$Value % 10             modulo</code></pre>
+<p><strong>Comparison</strong> (returns <code>true</code> or <code>false</code>)</p>
+<pre><code>$Price &gt; 100
+$Name == 'Widget A'
+$Status != 'inactive'</code></pre>
+<p><strong>Logic</strong></p>
+<pre><code>$Price &gt; 10 &amp;&amp; $Qty &gt; 5
+$Category == 'A' || $Category == 'B'</code></pre>
+<p><strong>String functions</strong></p>
+<pre><code>UPPER($Name)                     → "WIDGET A"
+LOWER($Name)                     → "widget a"
+TRIM($Name)                      → removes leading/trailing spaces
+LEN($Name)                       → number of characters
+CONCAT($First, ' ', $Last)       → joins multiple values</code></pre>
+<p><strong>Math functions</strong></p>
+<pre><code>ROUND($Price, 2)    → round to 2 decimal places
+ABS($Diff)          → absolute value
+FLOOR($Score)       → round down to integer
+CEIL($Score)        → round up to integer</code></pre>
+<p><strong>IF / conditional</strong></p>
+<pre><code>IF($Price &gt; 100, 'Expensive', 'Affordable')
+IF($Qty == 0, 'Out of stock', $Qty)</code></pre>
+<p>String literals use single quotes: <code>'hello'</code>. If a column reference doesn't exist or division by zero occurs, the cell shows <code>#ERR</code>.</p>
+<h4 id="examples">Examples</h4>
+<div class="table-wrap"><table><thead><tr><th>Goal</th><th>Expression</th><th>Output label</th></tr></thead><tbody><tr><td>Total per row</td><td><code>$Price * $Qty</code></td><td><code>Revenue</code></td></tr><tr><td>10% discount</td><td><code>ROUND($Price * 0.9, 2)</code></td><td><code>Discounted Price</code></td></tr><tr><td>Letter grade</td><td><code>IF($Score &gt;= 90, 'A', IF($Score &gt;= 70, 'B', 'C'))</code></td><td><code>Grade</code></td></tr><tr><td>Full name</td><td><code>CONCAT($FirstName, ' ', $LastName)</code></td><td><code>Full Name</code></td></tr><tr><td>Margin %</td><td><code>ROUND(($Revenue - $Cost) / $Revenue * 100, 1)</code></td><td><code>Margin %</code></td></tr></tbody></table></div>
+<hr>
+<h3 id="join-node-sky-blue">Join Node  <code>⋈ sky blue</code></h3>
+<p><strong>What it does:</strong> Combines two tables in one of six ways — from simple row stacking to full relational joins. The canvas wire direction determines which table is Left and which is Right.</p>
+<p><strong>Inputs:</strong> Two fixed ports — <strong>Left Table</strong> and <strong>Right Table</strong>. Wire a Table node's output to each.</p>
+<p><strong>Output:</strong> Combined columns from both tables (exact shape depends on join mode).</p>
+<blockquote><strong>Relational vs Non-relational:</strong> - Tables <strong>without</strong> a shared key → use <strong>Stack rows</strong> or <strong>Paste columns</strong> - Tables <strong>with</strong> a shared key column → use <strong>Inner / Left / Right / Full Outer</strong>  The config panel shows key column selectors only when a key-based mode is selected.</blockquote>
+<h4 id="join-modes">Join Modes</h4>
+<div class="table-wrap"><table><thead><tr><th>Mode</th><th>Needs key?</th><th>What it produces</th></tr></thead><tbody><tr><td><strong>Stack rows</strong></td><td>No</td><td>All rows from Left, then all rows from Right. Columns matched by name; mismatched columns get blank cells.</td></tr><tr><td><strong>Paste columns</strong></td><td>No</td><td>Left and Right columns side by side, aligned by row index. Row 1 next to Row 1. If tables differ in length, shorter side gets blanks.</td></tr><tr><td><strong>Inner Join</strong></td><td>Yes</td><td>Only rows where the key value exists in <strong>both</strong> tables.</td></tr><tr><td><strong>Left Join</strong></td><td>Yes</td><td>All rows from Left. Right columns filled where a key match exists, blank otherwise.</td></tr><tr><td><strong>Right Join</strong></td><td>Yes</td><td>All rows from Right. Left columns filled where a key match exists, blank otherwise.</td></tr><tr><td><strong>Full Outer Join</strong></td><td>Yes</td><td>All rows from both tables. Blanks on whichever side has no match.</td></tr></tbody></table></div>
+<h4 id="configuration-fields-key-based-modes-only">Configuration Fields (key-based modes only)</h4>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>What to put</th></tr></thead><tbody><tr><td><strong>Left key column</strong></td><td>The column in the Left source to match on.</td></tr><tr><td><strong>Right key column</strong></td><td>The column in the Right source to match on.</td></tr></tbody></table></div>
+<p>The config panel shows which tables are connected (green = wired, red = missing) before you choose a mode.</p>
+<h4 id="if-two-columns-share-the-same-name-the-right-column-is-renamed-columnname-right-to-avoid-overwriting">If two columns share the same name, the Right column is renamed <code>ColumnName (right)</code> to avoid overwriting.</h4>
+<h4 id="step-by-step-example-stack">Step-by-Step Example — Stack</h4>
+<p>Two regional sales sheets: <strong>Sales_North</strong> and <strong>Sales_East</strong>, same columns.</p>
+<ol><li>Add a <strong>Join</strong> node</li>
+<li>Wire <code>Sales_North ●</code> → <code>● Left Table</code></li>
+<li>Wire <code>Sales_East ●</code> → <code>● Right Table</code></li>
+<li>Click ⚙ → Mode: <strong>Stack rows</strong> → Save</li>
+<li>Run ▶ → output contains all rows from both sheets combined</li></ol>
+<h4 id="step-by-step-example-inner-join">Step-by-Step Example — Inner Join</h4>
+<p>Tables: <strong>Employees</strong> (<code>EmpID</code>, <code>Name</code>, <code>DeptID</code>) and <strong>Departments</strong> (<code>DeptID</code>, <code>DeptName</code>, <code>Budget</code>)</p>
+<ol><li>Add a <strong>Join</strong> node</li>
+<li>Wire <code>Employees ●</code> → <code>● Left Table</code></li>
+<li>Wire <code>Departments ●</code> → <code>● Right Table</code></li>
+<li>Click ⚙:</li></ol>
+<ul><li><strong>Mode:</strong> Inner Join</li>
+<li><strong>Left key:</strong> <code>DeptID</code></li>
+<li><strong>Right key:</strong> <code>DeptID</code></li></ul>
+<ol><li>Run ▶ → output contains only employees whose DeptID exists in Departments, with all columns from both tables</li></ol>
+<hr>
+<h3 id="api-node-red">API Node  <code>⇡ red</code></h3>
+<p><strong>What it does:</strong> Fetches JSON from a URL and turns the response into a table of columns. Acts as a data source — no input wires needed.</p>
+<p><strong>Input:</strong> None required.</p>
+<p><strong>Output:</strong> One output column per JSON field in the response.</p>
+<h4 id="configuration-fields">Configuration Fields</h4>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>What to put</th></tr></thead><tbody><tr><td><strong>URL</strong></td><td>Full URL to fetch. Must support CORS.</td></tr><tr><td><strong>Method</strong></td><td><code>GET</code> (default) or <code>POST</code>.</td></tr><tr><td><strong>JSON path</strong></td><td>Dot-path into the response to reach the data array (e.g. <code>data.items</code>). Leave blank to use the full response.</td></tr><tr><td><strong>Request headers</strong></td><td>JSON object of extra headers, e.g. <code>{ "Authorization": "Bearer token" }</code>. Use <code>{}</code> if none needed.</td></tr></tbody></table></div>
+<h4 id="json-path-example">JSON Path Example</h4>
+<pre><code class="lang-json">{ "status": "ok", "data": { "items": [ {"id":1,"name":"Alice"}, {"id":2,"name":"Bob"} ] } }</code></pre>
+<p>JSON path <code>data.items</code> → extracts the array → columns: <code>id</code>, <code>name</code>.</p>
+<h4 id="cors-note">CORS Note</h4>
+<p>The API must include <code>Access-Control-Allow-Origin: *</code> in its response. Private/enterprise APIs typically require a server-side proxy — the API node cannot bypass browser security restrictions.</p>
+<hr>
+<h2 id="chaining-nodes-pipelines">Chaining Nodes (Pipelines)</h2>
+<p>The output of any operator node can be wired into the input of another:</p>
+<pre><code>[Table: Orders]
+         ●─────────────────────────────────────────────────┐
+         ●─────────────────────────┐                       │
+         ●──────────┐              │                       │
+                    ▼              ▼                       ▼
+               [Filter]       [Formula]             [Join: Left]
+               date &gt; X       Revenue = $Price*$Qty       │
+                    │              │                       │
+                    └──────────────┴───────────────────────┘
+                                   ▼
+                              [Join: Stack]
+                                   │
+                                   ▼
+                            [Build Table → export]</code></pre>
+<p>When you click <strong>▶ Run</strong>, the engine performs a topological sort — every node always executes after all the nodes it depends on, regardless of where you placed the cards on the canvas.</p>
+<hr>
+<h2 id="removing-nodes">Removing Nodes</h2>
+<ul><li>Click the <strong>✕</strong> button on the node card header to delete that node</li>
+<li>Select one or more nodes (click header, or rubber-band drag), then press <strong>Delete</strong> or <strong>Backspace</strong></li>
+<li>Deleting a node also removes all its connected wires. Connected operator nodes re-evaluate their ⚙ button state immediately.</li></ul>
+<hr>
+<h2 id="cycle-detection">Cycle Detection</h2>
+<p>If you create a loop (Node A → Node B → Node A), the engine detects it and marks the cycle nodes with a red <strong>✕</strong> error badge. Non-cycle nodes still execute normally.</p>
+<hr>
+<h2 id="exec-state-badges">Exec State Badges</h2>
+<p>Each operator node shows a state badge after running:</p>
+<div class="table-wrap"><table><thead><tr><th>Badge</th><th>Colour</th><th>Meaning</th></tr></thead><tbody><tr><td><em>(none)</em></td><td>—</td><td>Idle — not yet run</td></tr><tr><td><code>●</code> pulsing</td><td>Amber</td><td>Currently running</td></tr><tr><td><code>✓</code></td><td>Green</td><td>Ran successfully</td></tr><tr><td><code>✕</code></td><td>Red</td><td>Failed — hover for error message</td></tr></tbody></table></div>
+<p>The node card border colour also changes to match.</p>
+<hr>
+<h2 id="building-a-table-from-output">Building a Table from Output</h2>
+<p>Select any node (click its header) → click <strong>Build Table</strong> in the toolbar. A new sheet is created from that node's current output data, including all columns added by operator nodes.</p>
+<hr>
+<h2 id="quick-reference">Quick Reference</h2>
+<div class="table-wrap"><table><thead><tr><th>I want to…</th><th>Use</th></tr></thead><tbody><tr><td>Keep rows matching a condition</td><td><strong>Filter</strong></td></tr><tr><td>Add one column from another table by key</td><td><strong>VLookup</strong></td></tr><tr><td>Add a calculated column</td><td><strong>Formula</strong></td></tr><tr><td>Stack two tables' rows together</td><td><strong>Join</strong> → Stack rows</td></tr><tr><td>Paste two tables' columns side by side</td><td><strong>Join</strong> → Paste columns</td></tr><tr><td>Merge by a shared key column</td><td><strong>Join</strong> → Inner / Left / Right / Outer</td></tr><tr><td>Pull live data from a URL</td><td><strong>API</strong></td></tr><tr><td>Chain multiple transforms</td><td>Wire operator outputs into next operator's input</td></tr><tr><td>Export the result as a sheet</td><td>Select node → Build Table</td></tr><tr><td>Add an operator quickly (pre-wired)</td><td>Right-click a teal port → choose operator</td></tr><tr><td>Remove a node</td><td>Click ✕ on card, or select + Delete key</td></tr></tbody></table></div></article>
+  <aside class="gx-docs-related">
+    <p class="gx-docs-related-label">Related</p>
+    <div class="gx-link-row"><a class="gx-link-chip" href="/tools/table-formatter/node-editor/">Node Editor Mode</a>
+      <a class="gx-link-chip" href="/tools/table-formatter/docs/getting-started.html">Getting Started</a>
+      <a class="gx-link-chip" href="/tools/table-formatter/docs/modes/">Modes Overview</a></div>
+  </aside>
+</div>
+</body>
+</html>

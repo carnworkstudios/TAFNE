@@ -3,6 +3,7 @@
 <html lang="en" data-theme="light">
 
 <head>
+<base href="/tools/table-formatter/">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -10,179 +11,36 @@
     <link rel="icon" type="image/png" href="/assets/images/Ginexys_Logo.png">
 
     <!-- ── Primary SEO ── -->
-    <title>Free Online Table Editor — Edit, Join, Validate Tables in Browser · GINEXYS</title>
-    <meta name="description"
-        content="Free browser-based table tool with 3 modes: Table Editing (style, transpose, merge, drag-and-drop), Node Editor (VLOOKUP, join CSV files, filter, API fetch, formula), and Lab Mode (validate, analyze, transform). No Excel, no install.">
+    <title>Lab Mode — Validate, Analyze & Transform Table Data | GINEXYS</title>
+    <meta name="description" content="Validate CSV and HTML tables for structural errors, analyze column statistics and data patterns, and apply batch transformations — all locally in your browser. Your data never leaves your device.">
     <meta name="keywords"
         content="table formatter, free online table editor, CSV to markdown, HTML to markdown table, VLOOKUP online, join CSV files online, filter table online, validate CSV online, transpose CSV without Excel, SQL insert from CSV, merge cells markdown table, markdown table generator, table editor no Excel, TAFNE, GINEXYS">
     <meta name="author" content="GINEXYS">
     <meta name="robots" content="index, follow">
-    <link rel="canonical" href="https://ginexys.com/tools/table-formatter/index.html">
+    <link rel="canonical" href="https://ginexys.com/tools/table-formatter/lab-mode/">
 
     <!-- ── Open Graph ── -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="GINEXYS">
-    <meta property="og:title" content="Free Online Table Editor — Edit, Join & Validate Tables · GINEXYS">
-    <meta property="og:description"
-        content="3-mode browser table tool: visually edit CSV/HTML tables, run VLOOKUP and joins in the Node Editor, and validate/transform data in Lab Mode. Free, private, no install.">
-    <meta property="og:url" content="https://ginexys.com/tools/table-formatter/index.html">
+    <meta property="og:title" content="Lab Mode — Validate, Analyze & Transform Table Data | GINEXYS">
+    <meta property="og:description" content="Validate CSV and HTML tables for structural errors, analyze column statistics and data patterns, and apply batch transformations — all locally in your browser. Your data never leaves your device.">
+    <meta property="og:url" content="https://ginexys.com/tools/table-formatter/lab-mode/">
     <meta property="og:image" content="https://ginexys.com/assets/images/og-image.png">
     <meta property="og:locale" content="en_US">
 
     <!-- ── Twitter / X Card ── -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Free Online Table Editor — Edit, Join & Validate · GINEXYS">
-    <meta name="twitter:description"
-        content="Table Editing + Node Editor (VLOOKUP, Join, Filter, API) + Lab Mode (Validate, Analyze, Transform). Free, browser-only, no install.">
+    <meta name="twitter:title" content="Lab Mode — Validate, Analyze & Transform Table Data | GINEXYS">
+    <meta name="twitter:description" content="Validate CSV and HTML tables for structural errors, analyze column statistics and data patterns, and apply batch transformations — all locally in your browser. Your data never leaves your device.">
     <meta name="twitter:image" content="https://ginexys.com/assets/images/og-image.png">
     <meta name="twitter:site" content="@GINEXYS">
 
     <!-- ── Structured Data ── -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "SoftwareApplication",
-          "@id": "https://ginexys.com/tools/table-formatter/#software",
-          "name": "Table Formatter",
-          "alternateName": "TAFNE",
-          "url": "https://ginexys.com/tools/table-formatter/index.html",
-          "applicationCategory": "DeveloperApplication",
-          "operatingSystem": "Web Browser",
-          "description": "Free browser-based table tool with three modes: Table Editing Mode for visual editing, cell merging, transpose, column toggle, and styling; Node Editor Mode for VLOOKUP, joining CSV files by column, filtering, API data fetching, and formula evaluation; and Lab Mode for CSV validation, data analysis, and data transformation. No installation, no account, all processing happens locally in the browser.",
-          "applicationSubCategory": "Table Editor, Data Transformation, CSV Tool",
-          "featureList": [
-            "Table Editing Mode: visual drag-and-drop editor",
-            "Table Editing Mode: cell merging, row/column operations",
-            "Table Editing Mode: transpose table",
-            "Table Editing Mode: column toggle and styling",
-            "Table Editing Mode: apply CSS classes and IDs",
-            "Table Editing Mode: export to HTML, Markdown, CSV, JSON, SQL",
-            "Node Editor Mode: VLOOKUP between two tables",
-            "Node Editor Mode: join CSV files by common column",
-            "Node Editor Mode: filter table data without Excel",
-            "Node Editor Mode: fetch data from API into table",
-            "Node Editor Mode: formula evaluation across columns",
-            "Lab Mode: validate CSV data and find errors",
-            "Lab Mode: analyze data patterns and statistics",
-            "Lab Mode: transform and clean table data",
-            "Parse HTML, ASCII, CSV, and plain text input",
-            "Monaco-powered code output editor",
-            "Dark and light theme",
-            "Local-first privacy — data never leaves the browser"
-          ],
-          "author": {
-            "@type": "Organization",
-            "name": "GINEXYS",
-            "url": "https://ginexys.com"
-          },
-          "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD"
-          },
-          "isPartOf": {
-            "@type": "WebSite",
-            "name": "GINEXYS",
-            "url": "https://ginexys.com"
-          }
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://ginexys.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Table Formatter",
-              "item": "https://ginexys.com/tools/table-formatter/index.html"
-            }
-          ]
-        }
-      ]
-    }
-    </script>
+    
 
 
     <!-- ── FAQ Structured Data (AEO — Answer Engine Optimization) ── -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      "mainEntity": [
-        {
-          "@type": "Question",
-          "name": "How do I VLOOKUP between two CSV files without Excel?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Use Ginexys Table Formatter's Node Editor mode. Upload both CSV files as tables, add a VLookup node, select the matching column from each table, and the joined result is generated instantly in your browser. No Excel, no Python, no install required. Open the tool at ginexys.com/tools/table-formatter."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "How do I convert an HTML table to Markdown online?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Paste your HTML into Ginexys Table Formatter, select Markdown as the export format, and copy the result. It works for Docusaurus, GitBook, GitHub READMEs, and any Markdown-based documentation platform. The conversion runs entirely in your browser at ginexys.com/tools/table-formatter."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "Can I join two CSV files by a common column online?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Yes. Ginexys Table Formatter's Node Editor includes a Join node that merges two CSV tables by a shared column key — equivalent to a SQL JOIN or Excel VLOOKUP. Load both files, connect a Join node, pick the key column, and download the result. No software needed."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "How do I validate CSV data in the browser without uploading it?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Use Lab Mode in Ginexys Table Formatter. It validates your CSV for errors (missing fields, type mismatches, duplicate rows), analyzes data patterns, and lets you transform or clean the data — all locally in your browser. Your data never leaves your device."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "How do I transpose a CSV or table without Excel?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "In Ginexys Table Formatter's Table Editing Mode, load your CSV or paste your table and use the Transpose operation to flip rows and columns instantly. The result can be exported back as CSV, HTML, Markdown, or JSON."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "How do I generate SQL INSERT statements from a CSV or spreadsheet?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Load your CSV into Ginexys Table Formatter, then select SQL as the export format. It generates ready-to-run INSERT statements from your table data — useful for seeding Supabase, Prisma, MySQL, or any SQL database directly from a spreadsheet."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "Does the Ginexys table formatter work offline?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Yes. All three modes — Table Editing, Node Editor, and Lab Mode — run entirely in your browser. No files are uploaded to any server. You can use the tool with no internet connection after the page has loaded."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "How do I filter table rows without Excel or Python?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Use the Node Editor mode in Ginexys Table Formatter. Add a Filter node, set your condition (e.g., column value equals, contains, or is greater than), and the filtered rows are returned as a new table you can export or chain into further transformations."
-          }
-        }
-      ]
-    }
-    </script>
+    
 
     <!-- Bootstrap 4 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.1.3/dist/css/bootstrap.min.css"
@@ -258,6 +116,38 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebApplication",
+      "name": "Lab Mode — Validate, Analyze & Transform Table Data",
+      "url": "https://ginexys.com/tools/table-formatter/lab-mode/",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Web",
+      "description": "Validate CSV and HTML tables for structural errors, analyze column statistics and data patterns, and apply batch transformations — all locally in your browser. Your data never leaves your device.",
+      "featureList": [
+        "CSV validation — detect missing fields, type mismatches, and duplicate rows",
+        "Column statistics — count, min, max, unique values, null rate",
+        "Data pattern analysis across rows and columns",
+        "Batch transformation and data cleaning operations",
+        "Runs entirely in the browser — no data uploaded"
+      ],
+      "isPartOf": {
+        "@type": "WebApplication",
+        "name": "table formatter",
+        "url": "https://ginexys.com/tools/table-formatter/"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+  ]
+}
+</script>
 </head>
 
 <body>

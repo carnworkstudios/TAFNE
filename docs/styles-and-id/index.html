@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Table Styles & IDs — CSS Classes, Accordion Rows, Column Tabs | GINEXYS</title>
+<meta name="description" content="Reference for CSS classes, IDs, and utility styles in GINEXYS Table Formatter. Covers accordion-header for collapsible rows, sp-N column tab switching, sticky headers, text rotation, and highlighting.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://ginexys.com/tools/table-formatter/docs/styles-and-id/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Table Styles & IDs — CSS Classes, Accordion Rows, Column Tabs | GINEXYS">
+<meta property="og:description" content="Reference for CSS classes, IDs, and utility styles in GINEXYS Table Formatter. Covers accordion-header for collapsible rows, sp-N column tab switching, sticky headers, text rotation, and highlighting.">
+<meta property="og:url" content="https://ginexys.com/tools/table-formatter/docs/styles-and-id/">
+<meta property="og:site_name" content="GINEXYS">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Table Styles & IDs — CSS Classes, Accordion Rows, Column Tabs",
+      "description": "Reference for CSS classes, IDs, and utility styles in GINEXYS Table Formatter. Covers accordion-header for collapsible rows, sp-N column tab switching, sticky headers, text rotation, and highlighting.",
+      "url": "https://ginexys.com/tools/table-formatter/docs/styles-and-id/",
+      "isPartOf": {
+        "@type": "WebApplication",
+        "name": "Table Formatter",
+        "url": "https://ginexys.com/tools/table-formatter/"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "GINEXYS",
+        "url": "https://ginexys.com"
+      },
+      "dateModified": "2026-04-25"
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "GINEXYS",
+          "item": "https://ginexys.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Tools",
+          "item": "https://ginexys.com/tools/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Table Formatter",
+          "item": "https://ginexys.com/tools/table-formatter/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 4,
+          "name": "Docs",
+          "item": "https://ginexys.com/tools/table-formatter/docs/getting-started.html"
+        },
+        {
+          "@type": "ListItem",
+          "position": 5,
+          "name": "Styles & IDs"
+        }
+      ]
+    }
+  ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>:root { --bg:#0b1018;--bg-r:#0f1720;--bg-o:#162030;--br:#1e3348;--br-s:#2a4a66;--ac:#c9a84c;--ac2:#00b4d8;--tx:#d8eaf8;--txs:#6a90b0;--txd:#354d63;--radius:6px; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--tx);font-family:'DM Mono','Courier New',monospace;font-size:13px;line-height:1.65;}
+  .gx-nav{height:44px;background:var(--bg-r);border-bottom:1px solid var(--br);display:flex;align-items:center;padding:0 20px;gap:0;position:sticky;top:0;z-index:10;}
+  .gx-breadcrumb{list-style:none;display:flex;align-items:center;gap:0;flex:1;min-width:0;overflow:hidden;}
+  .gx-breadcrumb li{display:flex;align-items:center;font-size:11px;letter-spacing:.05em;white-space:nowrap;color:var(--txd);}
+  .gx-breadcrumb li+li::before{content:'/';margin:0 6px;color:var(--txd);}
+  .gx-breadcrumb a{color:var(--txs);text-decoration:none;transition:color .15s;}
+  .gx-breadcrumb a:hover{color:var(--ac);}
+  .gx-breadcrumb li:last-child{color:var(--tx);overflow:hidden;text-overflow:ellipsis;}
+  .gx-open-btn{font-size:10px;letter-spacing:.08em;color:var(--txs);text-decoration:none;border:1px solid var(--br);border-radius:var(--radius);padding:4px 12px;white-space:nowrap;transition:border-color .15s,color .15s;flex-shrink:0;}
+  .gx-open-btn:hover{border-color:var(--ac);color:var(--ac);}
+  .gx-docs-wrap{max-width:760px;margin:0 auto;padding:36px 24px 80px;}
+  .gx-docs-content h1{font-size:24px;color:var(--tx);margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid var(--br);line-height:1.3;}
+  .gx-docs-content h2{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx);margin:28px 0 10px;padding-left:8px;border-left:2px solid var(--ac);}
+  .gx-docs-content h3{font-size:12px;color:var(--ac2);margin:18px 0 6px;}
+  .gx-docs-content h4{font-size:12px;color:var(--txs);margin:14px 0 4px;font-style:italic;}
+  .gx-docs-content p{color:var(--txs);margin-bottom:12px;line-height:1.8;}
+  .gx-docs-content ul,.gx-docs-content ol{margin:8px 0 14px 20px;color:var(--txs);}
+  .gx-docs-content li{margin-bottom:5px;line-height:1.7;}
+  .gx-docs-content strong{color:var(--tx);font-weight:500;}
+  .gx-docs-content em{color:var(--txs);font-style:italic;}
+  .gx-docs-content code{background:var(--bg-o);padding:1px 5px;border:1px solid var(--br);font-size:11px;color:var(--ac2);border-radius:3px;}
+  .gx-docs-content pre{background:var(--bg-o);border:1px solid var(--br);border-left:2px solid var(--ac);padding:14px 16px;margin:14px 0;overflow-x:auto;border-radius:var(--radius);}
+  .gx-docs-content pre code{background:none;border:none;padding:0;color:var(--txs);font-size:11px;line-height:1.65;}
+  .gx-docs-content blockquote{border-left:3px solid var(--ac);padding:10px 16px;background:rgba(201,168,76,.06);margin:14px 0;color:var(--txs);border-radius:0 var(--radius) var(--radius) 0;}
+  .gx-docs-content blockquote.note{border-left-color:var(--ac2);background:rgba(0,180,216,.06);}
+  .gx-docs-content hr{border:none;border-top:1px solid var(--br);margin:24px 0;}
+  .gx-docs-content a{color:var(--ac2);text-decoration:none;}
+  .gx-docs-content a:hover{text-decoration:underline;}
+  .gx-docs-content img{width:100%;border-radius:var(--radius);margin:12px 0;display:block;}
+  .gx-docs-content .table-wrap{overflow-x:auto;margin:14px 0;}
+  .gx-docs-content table{width:100%;border-collapse:collapse;font-size:12px;}
+  .gx-docs-content th{text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--txs);padding:8px 12px;border-bottom:1px solid var(--br);background:var(--bg-o);}
+  .gx-docs-content td{padding:7px 12px;border-bottom:1px solid var(--br);color:var(--txs);vertical-align:top;}
+  .gx-docs-related{margin-top:40px;padding-top:20px;border-top:1px solid var(--br);}
+  .gx-docs-related-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--txd);margin-bottom:10px;}
+  .gx-link-row{display:flex;flex-wrap:wrap;gap:8px;}
+  .gx-link-chip{font-size:11px;color:var(--txs);text-decoration:none;border:1px solid var(--br);border-radius:var(--radius);padding:5px 12px;transition:border-color .15s,color .15s;white-space:nowrap;}
+  .gx-link-chip:hover{border-color:var(--ac2);color:var(--ac2);}</style>
+</head>
+<body>
+<nav class="gx-nav" aria-label="Breadcrumb">
+  <ol class="gx-breadcrumb"><li><a href="/">GINEXYS</a></li><li><a href="/tools/">Tools</a></li><li><a href="/tools/table-formatter/">Table Formatter</a></li><li><a href="/tools/table-formatter/docs/getting-started.html">Docs</a></li><li aria-current="page">Styles & IDs</li></ol>
+  <a class="gx-open-btn" href="/tools/table-formatter/">Open Tool ↗</a>
+</nav>
+<div class="gx-docs-wrap">
+  <article class="gx-docs-content"><h1 id="styles-and-ids">Styles and IDs</h1>
+<p>TIFANY allows you to apply custom classes, IDs, and visual styles to any element within your table (Cell, Row, or Column). Additionally, several built-in utility classes provide advanced interactivity such as collapsible rows and tabbed column switching.</p>
+<hr>
+<h2 id="1-built-in-utility-classes">1. Built-in Utility Classes</h2>
+<p>TIFANY includes pre-configured classes that trigger specific behaviors when applied to table elements.</p>
+<h3 id="collapsible-rows-accordion-header">Collapsible Rows (<code>accordion-header</code>)</h3>
+<p>The <code>accordion-header</code> class transforms a row into a clickable toggle that expands or collapses the rows beneath it.</p>
+<ul><li><strong>How to apply</strong>: Apply the class <code>accordion-header</code> to a <code>&lt;tr&gt;</code> element.</li>
+<li><strong>Behavior</strong>: When clicked, all subsequent <code>&lt;tr&gt;</code> elements will be toggled (hidden/shown) until another <code>accordion-header</code> row is encountered.</li>
+<li><strong>Use Case</strong>: Grouping large datasets into expandable sections (e.g., a "Summary" row that expands to show "Details").</li></ul>
+<h3 id="column-tab-switching-sp-index">Column Tab Switching (<code>sp-$index</code>)</h3>
+<p>The <code>sp-</code> system allows you to create tabs that switch the visibility of specific columns or cells.</p>
+<ul><li><strong>How to apply</strong>: </li></ul>
+<p>    1.  Apply a class in the format <code>sp-1</code>, <code>sp-2</code>, etc., to cells or columns.     2.  Use the <strong>Tabs</strong> input in the top toolbar to generate a tab bar with matching indices.</p>
+<ul><li><strong>Behavior</strong>: Selecting a tab (e.g., Tab "1") will make all elements with the class <code>sp-1</code> active (visible) while hiding others in the same group.</li>
+<li><strong>Use Case</strong>: Creating multi-view tables where users can toggle between different data categories (e.g., "Monthly" vs "Quarterly" views).</li></ul>
+<h3 id="visual-emphasis-highlighted">Visual Emphasis (<code>highlighted</code>)</h3>
+<p>A built-in class for highlighting specific cells with a distinct background color.</p>
+<ul><li><strong>Use Case</strong>: Marking important data points or search results.</li></ul>
+<h3 id="text-orientation-sideways-face">Text Orientation (<code>sideways-face</code>)</h3>
+<p>Rotates the text within a cell by 90 degrees or flips it vertically.</p>
+<ul><li><strong>Use Case</strong>: Vertical headers for narrow columns.</li></ul>
+<h3 id="sticky-headers-freeze-pane">Sticky Headers (<code>freeze-pane</code>)</h3>
+<p>Keeps the selected row or column visible while scrolling through large tables.</p>
+<ul><li><strong>Use Case</strong>: Maintaining context in tables with hundreds of rows.</li></ul>
+<hr>
+<h2 id="2-applying-styles-and-ids">2. Applying Styles and IDs</h2>
+<p>Use the <strong>Styles & ID</strong> section in the left panel to modify selected elements.</p>
+<h3 id="element-selection">Element Selection</h3>
+<p>Choose whether to apply changes to:</p>
+<ul><li><strong>Cell</strong>: The specific <code>&lt;td&gt;</code> or <code>&lt;th&gt;</code> selected.</li>
+<li><strong>Row</strong>: Every cell within the parent <code>&lt;tr&gt;</code>.</li>
+<li><strong>Column</strong>: Every cell sharing the same visual column index.</li></ul>
+<h3 id="custom-classes-and-ids">Custom Classes and IDs</h3>
+<ul><li><strong>Class Name</strong>: Enter any string to add it to the element's <code>class</code> attribute.</li>
+<li><strong>sp- Prefix</strong>: Toggle the <strong>sp-</strong> button next to the input to automatically prefix your class name (e.g., entering <code>1</code> becomes <code>sp-1</code>).</li>
+<li><strong>ID</strong>: Assign a unique <code>id</code> attribute to the element.</li></ul>
+<h3 id="visual-properties-inline-styles">Visual Properties (Inline Styles)</h3>
+<div class="table-wrap"><table><thead><tr><th>Property</th><th>Control</th></tr></thead><tbody><tr><td><strong>Colors</strong></td><td>Modify Background, Text, or Border colors via the color picker.</td></tr><tr><td><strong>Spacing</strong></td><td>Set precise Padding or Margin values (Top, Right, Bottom, Left).</td></tr><tr><td><strong>Border Collapse</strong></td><td>Toggle between <code>collapse</code> and <code>separate</code> for the table grid.</td></tr></tbody></table></div>
+<hr>
+<h2 id="3-table-attributes">3. Table Attributes</h2>
+<p>Manage structural HTML attributes directly:</p>
+<ul><li><strong>Colspan</strong>: Merges the current cell with the specified number of columns to its right.</li>
+<li><strong>Rowspan</strong>: Merges the current cell with the specified number of rows beneath it.</li></ul>
+<blockquote class="note tip">Use the <strong>Apply to Selected</strong> button after configuring your styles to execute the changes. Use <strong>Undo</strong> if the result is not as expected.</blockquote></article>
+  <aside class="gx-docs-related">
+    <p class="gx-docs-related-label">Related</p>
+    <div class="gx-link-row"><a class="gx-link-chip" href="/tools/table-formatter/docs/functions/">Functions Reference</a>
+      <a class="gx-link-chip" href="/tools/table-formatter/docs/getting-started.html">Getting Started</a></div>
+  </aside>
+</div>
+</body>
+</html>
