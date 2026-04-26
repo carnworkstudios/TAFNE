@@ -3,7 +3,7 @@
 <html lang="en" data-theme="light">
 
 <head>
-<base href="/tools/table-formatter/">
+    <base href="/tools/table-formatter/">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -12,7 +12,8 @@
 
     <!-- ── Primary SEO ── -->
     <title>Node Editor — Visual Data Pipeline Builder | GINEXYS</title>
-    <meta name="description" content="Build visual data pipelines to join, filter, transform, and enrich tables without writing code. VLOOKUP, Join, Filter, Formula, and API nodes connect via drag-and-drop wires. Runs in the browser.">
+    <meta name="description"
+        content="Build visual data pipelines to join, filter, transform, and enrich tables without writing code. VLOOKUP, Join, Filter, Formula, and API nodes connect via drag-and-drop wires. Runs in the browser.">
     <meta name="keywords"
         content="table formatter, free online table editor, CSV to markdown, HTML to markdown table, VLOOKUP online, join CSV files online, filter table online, validate CSV online, transpose CSV without Excel, SQL insert from CSV, merge cells markdown table, markdown table generator, table editor no Excel, TAFNE, GINEXYS">
     <meta name="author" content="GINEXYS">
@@ -23,7 +24,8 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="GINEXYS">
     <meta property="og:title" content="Node Editor — Visual Data Pipeline Builder | GINEXYS">
-    <meta property="og:description" content="Build visual data pipelines to join, filter, transform, and enrich tables without writing code. VLOOKUP, Join, Filter, Formula, and API nodes connect via drag-and-drop wires. Runs in the browser.">
+    <meta property="og:description"
+        content="Build visual data pipelines to join, filter, transform, and enrich tables without writing code. VLOOKUP, Join, Filter, Formula, and API nodes connect via drag-and-drop wires. Runs in the browser.">
     <meta property="og:url" content="https://ginexys.com/tools/table-formatter/node-editor/">
     <meta property="og:image" content="https://ginexys.com/assets/images/og-image.png">
     <meta property="og:locale" content="en_US">
@@ -31,16 +33,37 @@
     <!-- ── Twitter / X Card ── -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Node Editor — Visual Data Pipeline Builder | GINEXYS">
-    <meta name="twitter:description" content="Build visual data pipelines to join, filter, transform, and enrich tables without writing code. VLOOKUP, Join, Filter, Formula, and API nodes connect via drag-and-drop wires. Runs in the browser.">
+    <meta name="twitter:description"
+        content="Build visual data pipelines to join, filter, transform, and enrich tables without writing code. VLOOKUP, Join, Filter, Formula, and API nodes connect via drag-and-drop wires. Runs in the browser.">
     <meta name="twitter:image" content="https://ginexys.com/assets/images/og-image.png">
     <meta name="twitter:site" content="@GINEXYS">
 
     <!-- ── Structured Data ── -->
-    
+
 
 
     <!-- ── FAQ Structured Data (AEO — Answer Engine Optimization) ── -->
-    
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "How do I do a VLOOKUP or join CSV files online without Excel?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Use the <a href=\"https://ginexys.com/tools/table-formatter/node-editor/index.html\">GINEXYS Node Editor</a> to build a visual data pipeline in your browser. Here is the step-by-step tutorial: 1. Load your CSV files into the Table Formatter. 2. Click the Node Editor tab in the sidebar. 3. Your loaded sheets will appear as Table Nodes. Right-click on the 'Out' port (the cyan color node). 4. Choose Join (or VLOOKUP) from the context menu to spawn an Operator Node. 5. Connect your second table to the new node, click the gear icon to select your configuration (Inner, Left, Full Outer), and run the pipeline. For detailed technical documentation, see the <a href=\"https://ginexys.com/tools/table-formatter/docs/node-editor-engine/index.html\">Node Editor Engine Guide</a>."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+
 
     <!-- Bootstrap 4 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.1.3/dist/css/bootstrap.min.css"
@@ -116,7 +139,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script type="application/ld+json">
+    <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@graph": [
@@ -170,6 +193,11 @@
                 title="Getting Started guide"
                 style="margin-left:auto; border: 2px solid; border-radius: 50%;font-size: 0.6rem;">?</a>
         </nav>
+        <!-- CWS: back-annotate to Schema Editor (hidden when standalone) -->
+        <button id="backAnnotateBtn" class="btn btn-sm" title="Back-annotate component labels to Schema Editor"
+            style="display:none; background: rgba(79, 172, 254, 0.15); border: 1px solid rgba(79, 172, 254, 0.4); color: #4facfe; font-weight: 600; margin-left: 12px;">
+            <i class="fas fa-reply"></i> Back-Annotate
+        </button>
     </header>
     <!-- ==================== FIRST-VISIT BANNER ==================== -->
     <div id="tafne-welcome-banner"
@@ -210,13 +238,13 @@
             <div class="input-toolbar-divider"></div>
 
             <!-- Select Tool (default active; normal selection mode) -->
-            <button id="selectToolToggle" class="theme-toggle-btn active"
+            <button id="selectToolToggle" class="theme-toggle-btn"
                 title="Table Mode — visual cell editor (click, Shift+click, Ctrl+click to select)">
                 <i class="fas fa-table"></i>
             </button>
 
             <!-- Node Editor -->
-            <button id="nodeEditorToggle" class="theme-toggle-btn"
+            <button id="nodeEditorToggle" class="theme-toggle-btn active"
                 title="Node Editor — build data pipelines with joins, filters and transforms">
                 <i class="fas fa-project-diagram"></i>
             </button>
@@ -229,8 +257,7 @@
 
             <!-- CWS: back-annotate to Schema Editor (hidden when standalone) -->
             <button id="backAnnotateBtn" class="theme-toggle-btn"
-                title="Back-annotate component labels to Schema Editor"
-                style="display:none;">
+                title="Back-annotate component labels to Schema Editor" style="display:none;">
                 <i class="fas fa-reply"></i>
             </button>
         </div>
@@ -505,7 +532,8 @@
             <!-- Lab Canvas (shown when Lab Mode is active, covers table view) -->
             <div id="labCanvas" class="draw-canvas">
                 <div class="draw-canvas-header">
-                    <span><i class="fas fa-flask"></i> Lab Mode &mdash; validate, transform &amp; analyze table data</span>
+                    <span><i class="fas fa-flask"></i> Lab Mode &mdash; validate, transform &amp; analyze table
+                        data</span>
                     <div class="draw-canvas-header-actions">
                         <button id="labClearAll" class="btn btn-sm btn-outline-danger" title="Clear pipeline">
                             <i class="fas fa-trash"></i> Clear
@@ -522,7 +550,8 @@
                             <button class="lab-tab" data-mode="transform">Transform</button>
                             <button class="lab-tab" data-mode="analyze">Analyze</button>
                             <div class="lab-tab-spacer"></div>
-                            <button id="labRecipeToggle" class="btn btn-xs btn-outline-secondary lab-recipe-btn">Recipe ▾</button>
+                            <button id="labRecipeToggle" class="btn btn-xs btn-outline-secondary lab-recipe-btn">Recipe
+                                ▾</button>
                             <button id="labRunBtn" class="btn btn-sm btn-primary lab-run-btn">
                                 <i class="fas fa-play"></i> Run
                             </button>
@@ -531,7 +560,8 @@
                         <div id="labFnPicker" class="lab-fn-picker" style="display:none;"></div>
                         <!-- Step list (scrollable) -->
                         <div id="labStepList" class="lab-step-list">
-                            <div class="lab-step-empty">No steps yet &mdash; click <strong>+ Add Step</strong> to begin.</div>
+                            <div class="lab-step-empty">No steps yet &mdash; click <strong>+ Add Step</strong> to begin.
+                            </div>
                         </div>
                         <!-- Add Step bar -->
                         <div class="lab-add-step-bar">
@@ -613,17 +643,17 @@
                 <div class="right-section-body collapsed" id="right-instruction">
                     <h6><b>Shortcuts</b></h6>
                     <p style="font-size:11px; line-height:1.7;">
-                        <kbd>Insert</kbd> Add Cell After &nbsp;
-                        <kbd>Shift+Insert</kbd> Add Cell Before<br>
-                        <kbd>Delete</kbd> Delete Cell &nbsp;
-                        <kbd>Shift+Delete</kbd> Delete Cell<br>
-                        <kbd>Ctrl+A</kbd> Select All Cells<br>
-                        <kbd>Ctrl+Shift+C</kbd> Copy Selected<br>
-                        <kbd>Ctrl+V</kbd> Paste After &nbsp;
-                        <kbd>Ctrl+Shift+V</kbd> Paste Before<br>
-                        <kbd>Alt+Shift+W</kbd> Merge Cell<br>
-                        <kbd>Alt+Shift+T</kbd> Text Split<br>
-                        <kbd>Alt+Shift+X</kbd> Apply Text Split
+                        <kbd>Ins</kbd> / <kbd>⌃/⌘↵</kbd> Add Cell After &nbsp;
+                        <kbd>⇧Ins</kbd> / <kbd>⇧⌃/⌘↵</kbd> Add Cell Before<br>
+                        <kbd>Del</kbd> / <kbd>⌫</kbd> Delete Cell &nbsp;
+                        <kbd>⇧Del</kbd> / <kbd>⇧⌫</kbd> Delete Cell<br>
+                        <kbd>⌃/⌘ + A</kbd> Select All Cells<br>
+                        <kbd>⌃/⌘ + C</kbd> Copy Selected<br>
+                        <kbd>⌃/⌘ + V</kbd> Paste After &nbsp;
+                        <kbd>⌃/⌘ + ⇧V</kbd> Paste Before<br>
+                        <kbd>⌥⇧W</kbd> Merge Cell &nbsp;
+                        <kbd>⌥⇧T</kbd> Text Split &nbsp;
+                        <kbd>⌥⇧X</kbd> Apply Split
                     </p>
                     <h6><b>Cell Selection</b></h6>
                     <ol style="font-size:11px; padding-left:16px; line-height:1.8;">
@@ -1100,93 +1130,93 @@
 
     <!-- ==================== CWS IPC: SCHEMA EDITOR BRIDGE ==================== -->
     <script>
-    (function () {
-        // Reveal back-annotate button only when embedded in OsShell
-        if (CwsBridge.isEmbedded) {
-            var btn = document.getElementById('backAnnotateBtn');
-            if (btn) btn.style.display = '';
-        }
+        (function () {
+            // Reveal back-annotate button only when embedded in OsShell
+            if (CwsBridge.isEmbedded) {
+                var btn = document.getElementById('backAnnotateBtn');
+                if (btn) btn.style.display = '';
+            }
 
-        // Flow 1 receive: Schema Editor → TAFNE (load-netlist)
-        CwsBridge.onData(async function (envelope) {
-            if (envelope?.hints?.action !== 'load-netlist') return;
-            var raw;
-            try {
-                raw = envelope.pointer
-                    ? await CwsBridge.getStore(envelope.pointer)
-                    : envelope.inline;
-            } catch (e) {
-                $.toast({ heading: 'TAFNE', text: 'Failed to fetch netlist: ' + e.message, icon: 'error', loader: false, stack: false });
-                return;
-            }
-            var netlist;
-            try { netlist = JSON.parse(raw); } catch (e) {
-                $.toast({ heading: 'TAFNE', text: 'Bad JSON from Schema Editor', icon: 'error', loader: false, stack: false });
-                return;
-            }
-            if (typeof loadNetlistAsSheets === 'function') loadNetlistAsSheets(netlist);
-        });
+            // Flow 1 receive: Schema Editor → TAFNE (load-netlist)
+            CwsBridge.onData(async function (envelope) {
+                if (envelope?.hints?.action !== 'load-netlist') return;
+                var raw;
+                try {
+                    raw = envelope.pointer
+                        ? await CwsBridge.getStore(envelope.pointer)
+                        : envelope.inline;
+                } catch (e) {
+                    $.toast({ heading: 'TAFNE', text: 'Failed to fetch netlist: ' + e.message, icon: 'error', loader: false, stack: false });
+                    return;
+                }
+                var netlist;
+                try { netlist = JSON.parse(raw); } catch (e) {
+                    $.toast({ heading: 'TAFNE', text: 'Bad JSON from Schema Editor', icon: 'error', loader: false, stack: false });
+                    return;
+                }
+                if (typeof loadNetlistAsSheets === 'function') loadNetlistAsSheets(netlist);
+            });
 
-        // Flow 2 send: TAFNE → Schema Editor (back-annotate)
-        document.getElementById('backAnnotateBtn').addEventListener('click', async function () {
-            if (!CwsBridge.isEmbedded) {
-                $.toast({ heading: 'TAFNE', text: 'Not embedded in OS Shell', icon: 'warning', loader: false, stack: false });
-                return;
-            }
-            var compSheet = window.sheets && window.sheets.find(function (s) { return s.name === 'Components'; });
-            if (!compSheet) {
-                $.toast({ heading: 'Back-annotate', text: 'No "Components" sheet found', icon: 'warning', loader: false, stack: false });
-                return;
-            }
-            var prevId = window.activeSheetId;
-            if (prevId !== compSheet.id) switchSheet(compSheet.id);
-            var $tables = $('#tableContainer table');
-            if (!$tables.length) {
-                $.toast({ heading: 'Back-annotate', text: 'Components sheet has no table', icon: 'warning', loader: false, stack: false });
+            // Flow 2 send: TAFNE → Schema Editor (back-annotate)
+            document.getElementById('backAnnotateBtn').addEventListener('click', async function () {
+                if (!CwsBridge.isEmbedded) {
+                    $.toast({ heading: 'TAFNE', text: 'Not embedded in OS Shell', icon: 'warning', loader: false, stack: false });
+                    return;
+                }
+                var compSheet = window.sheets && window.sheets.find(function (s) { return s.name === 'Components'; });
+                if (!compSheet) {
+                    $.toast({ heading: 'Back-annotate', text: 'No "Components" sheet found', icon: 'warning', loader: false, stack: false });
+                    return;
+                }
+                var prevId = window.activeSheetId;
+                if (prevId !== compSheet.id) switchSheet(compSheet.id);
+                var $tables = $('#tableContainer table');
+                if (!$tables.length) {
+                    $.toast({ heading: 'Back-annotate', text: 'Components sheet has no table', icon: 'warning', loader: false, stack: false });
+                    if (prevId && prevId !== compSheet.id) switchSheet(prevId);
+                    return;
+                }
+                var jsonStr = exportAsJson($tables);
                 if (prevId && prevId !== compSheet.id) switchSheet(prevId);
-                return;
-            }
-            var jsonStr = exportAsJson($tables);
-            if (prevId && prevId !== compSheet.id) switchSheet(prevId);
-            try {
-                var pointerId = await CwsBridge.requestStore(jsonStr, 'json-data');
-                CwsBridge.offerData(CwsContracts.createEnvelope({
-                    pointer: pointerId,
-                    contentType: 'json-data',
-                    metadata: { source: 'table-formatter' },
-                    hints: { suggestedTarget: 'svg_wiring', action: 'back-annotate' },
-                }));
-                $.toast({ heading: 'Back-annotate', text: 'Sent to Schema Editor', icon: 'success', loader: false, stack: false });
-            } catch (e) {
-                $.toast({ heading: 'Back-annotate', text: 'Send failed: ' + e.message, icon: 'error', loader: false, stack: false });
-            }
-        });
-    })();
+                try {
+                    var pointerId = await CwsBridge.requestStore(jsonStr, 'json-data');
+                    CwsBridge.offerData(CwsContracts.createEnvelope({
+                        pointer: pointerId,
+                        contentType: 'json-data',
+                        metadata: { source: 'table-formatter' },
+                        hints: { suggestedTarget: 'svg_wiring', action: 'back-annotate' },
+                    }));
+                    $.toast({ heading: 'Back-annotate', text: 'Sent to Schema Editor', icon: 'success', loader: false, stack: false });
+                } catch (e) {
+                    $.toast({ heading: 'Back-annotate', text: 'Send failed: ' + e.message, icon: 'error', loader: false, stack: false });
+                }
+            });
+        })();
     </script>
     <script>
-    // Mode routing — path-based activation + URL sync on switch
-    (function () {
-      var p = location.pathname;
+        // Mode routing — path-based activation + URL sync on switch
+        (function () {
+            var p = location.pathname;
 
-      // On load: activate mode matching the current path
-      if (/\/node-editor\//.test(p)) {
-        var b = document.getElementById('nodeEditorToggle'); if (b) b.click();
-      } else if (/\/lab-mode\//.test(p)) {
-        var b = document.getElementById('labModeToggle'); if (b) b.click();
-      }
+            // On load: activate mode matching the current path
+            if (/\/node-editor\//.test(p)) {
+                var b = document.getElementById('nodeEditorToggle'); if (b) b.click();
+            } else if (/\/lab-mode\//.test(p)) {
+                var b = document.getElementById('labModeToggle'); if (b) b.click();
+            }
 
-      // On switch: keep URL in sync
-      var modeMap = {
-        'nodeEditorToggle': '/tools/table-formatter/node-editor/',
-        'labModeToggle':    '/tools/table-formatter/lab-mode/',
-        'selectToolToggle': '/tools/table-formatter/table-mode/',
-        'neExit':           '/tools/table-formatter/',
-      };
-      document.addEventListener('click', function (e) {
-        var btn = e.target.closest('button');
-        if (btn && modeMap[btn.id]) history.replaceState({}, '', modeMap[btn.id]);
-      });
-    })();
+            // On switch: keep URL in sync
+            var modeMap = {
+                'nodeEditorToggle': '/tools/table-formatter/node-editor/',
+                'labModeToggle': '/tools/table-formatter/lab-mode/',
+                'selectToolToggle': '/tools/table-formatter/table-mode/',
+                'neExit': '/tools/table-formatter/',
+            };
+            document.addEventListener('click', function (e) {
+                var btn = e.target.closest('button');
+                if (btn && modeMap[btn.id]) history.replaceState({}, '', modeMap[btn.id]);
+            });
+        })();
     </script>
 
 </body>

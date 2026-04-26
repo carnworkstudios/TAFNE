@@ -308,7 +308,7 @@ class NodeInteractionManager {
         }
 
         // Ctrl+A → select all
-        if (e.ctrlKey && e.key === 'a' &&
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' &&
             !e.target.matches('input,textarea,[contenteditable="true"]')) {
             e.preventDefault();
             this._selectAllNodes();

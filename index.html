@@ -278,6 +278,11 @@
                 title="Getting Started guide"
                 style="margin-left:auto; border: 2px solid; border-radius: 50%;font-size: 0.6rem;">?</a>
         </nav>
+        <!-- CWS: back-annotate to Schema Editor (hidden when standalone) -->
+        <button id="backAnnotateBtn" class="btn btn-sm" title="Back-annotate component labels to Schema Editor"
+            style="display:none; background: rgba(79, 172, 254, 0.15); border: 1px solid rgba(79, 172, 254, 0.4); color: #4facfe; font-weight: 600; margin-left: 12px;">
+            <i class="fas fa-reply"></i> Back-Annotate
+        </button>
     </header>
     <!-- ==================== FIRST-VISIT BANNER ==================== -->
     <div id="tafne-welcome-banner"
@@ -337,8 +342,7 @@
 
             <!-- CWS: back-annotate to Schema Editor (hidden when standalone) -->
             <button id="backAnnotateBtn" class="theme-toggle-btn"
-                title="Back-annotate component labels to Schema Editor"
-                style="display:none;">
+                title="Back-annotate component labels to Schema Editor" style="display:none;">
                 <i class="fas fa-reply"></i>
             </button>
         </div>
@@ -613,7 +617,8 @@
             <!-- Lab Canvas (shown when Lab Mode is active, covers table view) -->
             <div id="labCanvas" class="draw-canvas">
                 <div class="draw-canvas-header">
-                    <span><i class="fas fa-flask"></i> Lab Mode &mdash; validate, transform &amp; analyze table data</span>
+                    <span><i class="fas fa-flask"></i> Lab Mode &mdash; validate, transform &amp; analyze table
+                        data</span>
                     <div class="draw-canvas-header-actions">
                         <button id="labClearAll" class="btn btn-sm btn-outline-danger" title="Clear pipeline">
                             <i class="fas fa-trash"></i> Clear
@@ -630,7 +635,8 @@
                             <button class="lab-tab" data-mode="transform">Transform</button>
                             <button class="lab-tab" data-mode="analyze">Analyze</button>
                             <div class="lab-tab-spacer"></div>
-                            <button id="labRecipeToggle" class="btn btn-xs btn-outline-secondary lab-recipe-btn">Recipe ▾</button>
+                            <button id="labRecipeToggle" class="btn btn-xs btn-outline-secondary lab-recipe-btn">Recipe
+                                ▾</button>
                             <button id="labRunBtn" class="btn btn-sm btn-primary lab-run-btn">
                                 <i class="fas fa-play"></i> Run
                             </button>
@@ -639,7 +645,8 @@
                         <div id="labFnPicker" class="lab-fn-picker" style="display:none;"></div>
                         <!-- Step list (scrollable) -->
                         <div id="labStepList" class="lab-step-list">
-                            <div class="lab-step-empty">No steps yet &mdash; click <strong>+ Add Step</strong> to begin.</div>
+                            <div class="lab-step-empty">No steps yet &mdash; click <strong>+ Add Step</strong> to begin.
+                            </div>
                         </div>
                         <!-- Add Step bar -->
                         <div class="lab-add-step-bar">
@@ -721,17 +728,17 @@
                 <div class="right-section-body collapsed" id="right-instruction">
                     <h6><b>Shortcuts</b></h6>
                     <p style="font-size:11px; line-height:1.7;">
-                        <kbd>Insert</kbd> Add Cell After &nbsp;
-                        <kbd>Shift+Insert</kbd> Add Cell Before<br>
-                        <kbd>Delete</kbd> Delete Cell &nbsp;
-                        <kbd>Shift+Delete</kbd> Delete Cell<br>
-                        <kbd>Ctrl+A</kbd> Select All Cells<br>
-                        <kbd>Ctrl+Shift+C</kbd> Copy Selected<br>
-                        <kbd>Ctrl+V</kbd> Paste After &nbsp;
-                        <kbd>Ctrl+Shift+V</kbd> Paste Before<br>
-                        <kbd>Alt+Shift+W</kbd> Merge Cell<br>
-                        <kbd>Alt+Shift+T</kbd> Text Split<br>
-                        <kbd>Alt+Shift+X</kbd> Apply Text Split
+                        <kbd>Ins</kbd> / <kbd>⌃/⌘↵</kbd> Add Cell After &nbsp;
+                        <kbd>⇧Ins</kbd> / <kbd>⇧⌃/⌘↵</kbd> Add Cell Before<br>
+                        <kbd>Del</kbd> / <kbd>⌫</kbd> Delete Cell &nbsp;
+                        <kbd>⇧Del</kbd> / <kbd>⇧⌫</kbd> Delete Cell<br>
+                        <kbd>⌃/⌘ + A</kbd> Select All Cells<br>
+                        <kbd>⌃/⌘ + C</kbd> Copy Selected<br>
+                        <kbd>⌃/⌘ + V</kbd> Paste After &nbsp;
+                        <kbd>⌃/⌘ + ⇧V</kbd> Paste Before<br>
+                        <kbd>⌥⇧W</kbd> Merge Cell &nbsp;
+                        <kbd>⌥⇧T</kbd> Text Split &nbsp;
+                        <kbd>⌥⇧X</kbd> Apply Split
                     </p>
                     <h6><b>Cell Selection</b></h6>
                     <ol style="font-size:11px; padding-left:16px; line-height:1.8;">
@@ -1208,93 +1215,93 @@
 
     <!-- ==================== CWS IPC: SCHEMA EDITOR BRIDGE ==================== -->
     <script>
-    (function () {
-        // Reveal back-annotate button only when embedded in OsShell
-        if (CwsBridge.isEmbedded) {
-            var btn = document.getElementById('backAnnotateBtn');
-            if (btn) btn.style.display = '';
-        }
+        (function () {
+            // Reveal back-annotate button only when embedded in OsShell
+            if (CwsBridge.isEmbedded) {
+                var btn = document.getElementById('backAnnotateBtn');
+                if (btn) btn.style.display = '';
+            }
 
-        // Flow 1 receive: Schema Editor → TAFNE (load-netlist)
-        CwsBridge.onData(async function (envelope) {
-            if (envelope?.hints?.action !== 'load-netlist') return;
-            var raw;
-            try {
-                raw = envelope.pointer
-                    ? await CwsBridge.getStore(envelope.pointer)
-                    : envelope.inline;
-            } catch (e) {
-                $.toast({ heading: 'TAFNE', text: 'Failed to fetch netlist: ' + e.message, icon: 'error', loader: false, stack: false });
-                return;
-            }
-            var netlist;
-            try { netlist = JSON.parse(raw); } catch (e) {
-                $.toast({ heading: 'TAFNE', text: 'Bad JSON from Schema Editor', icon: 'error', loader: false, stack: false });
-                return;
-            }
-            if (typeof loadNetlistAsSheets === 'function') loadNetlistAsSheets(netlist);
-        });
+            // Flow 1 receive: Schema Editor → TAFNE (load-netlist)
+            CwsBridge.onData(async function (envelope) {
+                if (envelope?.hints?.action !== 'load-netlist') return;
+                var raw;
+                try {
+                    raw = envelope.pointer
+                        ? await CwsBridge.getStore(envelope.pointer)
+                        : envelope.inline;
+                } catch (e) {
+                    $.toast({ heading: 'TAFNE', text: 'Failed to fetch netlist: ' + e.message, icon: 'error', loader: false, stack: false });
+                    return;
+                }
+                var netlist;
+                try { netlist = JSON.parse(raw); } catch (e) {
+                    $.toast({ heading: 'TAFNE', text: 'Bad JSON from Schema Editor', icon: 'error', loader: false, stack: false });
+                    return;
+                }
+                if (typeof loadNetlistAsSheets === 'function') loadNetlistAsSheets(netlist);
+            });
 
-        // Flow 2 send: TAFNE → Schema Editor (back-annotate)
-        document.getElementById('backAnnotateBtn').addEventListener('click', async function () {
-            if (!CwsBridge.isEmbedded) {
-                $.toast({ heading: 'TAFNE', text: 'Not embedded in OS Shell', icon: 'warning', loader: false, stack: false });
-                return;
-            }
-            var compSheet = window.sheets && window.sheets.find(function (s) { return s.name === 'Components'; });
-            if (!compSheet) {
-                $.toast({ heading: 'Back-annotate', text: 'No "Components" sheet found', icon: 'warning', loader: false, stack: false });
-                return;
-            }
-            var prevId = window.activeSheetId;
-            if (prevId !== compSheet.id) switchSheet(compSheet.id);
-            var $tables = $('#tableContainer table');
-            if (!$tables.length) {
-                $.toast({ heading: 'Back-annotate', text: 'Components sheet has no table', icon: 'warning', loader: false, stack: false });
+            // Flow 2 send: TAFNE → Schema Editor (back-annotate)
+            document.getElementById('backAnnotateBtn').addEventListener('click', async function () {
+                if (!CwsBridge.isEmbedded) {
+                    $.toast({ heading: 'TAFNE', text: 'Not embedded in OS Shell', icon: 'warning', loader: false, stack: false });
+                    return;
+                }
+                var compSheet = window.sheets && window.sheets.find(function (s) { return s.name === 'Components'; });
+                if (!compSheet) {
+                    $.toast({ heading: 'Back-annotate', text: 'No "Components" sheet found', icon: 'warning', loader: false, stack: false });
+                    return;
+                }
+                var prevId = window.activeSheetId;
+                if (prevId !== compSheet.id) switchSheet(compSheet.id);
+                var $tables = $('#tableContainer table');
+                if (!$tables.length) {
+                    $.toast({ heading: 'Back-annotate', text: 'Components sheet has no table', icon: 'warning', loader: false, stack: false });
+                    if (prevId && prevId !== compSheet.id) switchSheet(prevId);
+                    return;
+                }
+                var jsonStr = exportAsJson($tables);
                 if (prevId && prevId !== compSheet.id) switchSheet(prevId);
-                return;
-            }
-            var jsonStr = exportAsJson($tables);
-            if (prevId && prevId !== compSheet.id) switchSheet(prevId);
-            try {
-                var pointerId = await CwsBridge.requestStore(jsonStr, 'json-data');
-                CwsBridge.offerData(CwsContracts.createEnvelope({
-                    pointer: pointerId,
-                    contentType: 'json-data',
-                    metadata: { source: 'table-formatter' },
-                    hints: { suggestedTarget: 'svg_wiring', action: 'back-annotate' },
-                }));
-                $.toast({ heading: 'Back-annotate', text: 'Sent to Schema Editor', icon: 'success', loader: false, stack: false });
-            } catch (e) {
-                $.toast({ heading: 'Back-annotate', text: 'Send failed: ' + e.message, icon: 'error', loader: false, stack: false });
-            }
-        });
-    })();
+                try {
+                    var pointerId = await CwsBridge.requestStore(jsonStr, 'json-data');
+                    CwsBridge.offerData(CwsContracts.createEnvelope({
+                        pointer: pointerId,
+                        contentType: 'json-data',
+                        metadata: { source: 'table-formatter' },
+                        hints: { suggestedTarget: 'svg_wiring', action: 'back-annotate' },
+                    }));
+                    $.toast({ heading: 'Back-annotate', text: 'Sent to Schema Editor', icon: 'success', loader: false, stack: false });
+                } catch (e) {
+                    $.toast({ heading: 'Back-annotate', text: 'Send failed: ' + e.message, icon: 'error', loader: false, stack: false });
+                }
+            });
+        })();
     </script>
     <script>
-    // Mode routing — path-based activation + URL sync on switch
-    (function () {
-      var p = location.pathname;
+        // Mode routing — path-based activation + URL sync on switch
+        (function () {
+            var p = location.pathname;
 
-      // On load: activate mode matching the current path
-      if (/\/node-editor\//.test(p)) {
-        var b = document.getElementById('nodeEditorToggle'); if (b) b.click();
-      } else if (/\/lab-mode\//.test(p)) {
-        var b = document.getElementById('labModeToggle'); if (b) b.click();
-      }
+            // On load: activate mode matching the current path
+            if (/\/node-editor\//.test(p)) {
+                var b = document.getElementById('nodeEditorToggle'); if (b) b.click();
+            } else if (/\/lab-mode\//.test(p)) {
+                var b = document.getElementById('labModeToggle'); if (b) b.click();
+            }
 
-      // On switch: keep URL in sync
-      var modeMap = {
-        'nodeEditorToggle': '/tools/table-formatter/node-editor/',
-        'labModeToggle':    '/tools/table-formatter/lab-mode/',
-        'selectToolToggle': '/tools/table-formatter/table-mode/',
-        'neExit':           '/tools/table-formatter/',
-      };
-      document.addEventListener('click', function (e) {
-        var btn = e.target.closest('button');
-        if (btn && modeMap[btn.id]) history.replaceState({}, '', modeMap[btn.id]);
-      });
-    })();
+            // On switch: keep URL in sync
+            var modeMap = {
+                'nodeEditorToggle': '/tools/table-formatter/node-editor/',
+                'labModeToggle': '/tools/table-formatter/lab-mode/',
+                'selectToolToggle': '/tools/table-formatter/table-mode/',
+                'neExit': '/tools/table-formatter/',
+            };
+            document.addEventListener('click', function (e) {
+                var btn = e.target.closest('button');
+                if (btn && modeMap[btn.id]) history.replaceState({}, '', modeMap[btn.id]);
+            });
+        })();
     </script>
 
 </body>

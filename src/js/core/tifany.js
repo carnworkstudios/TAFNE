@@ -285,7 +285,7 @@ $(function () {
             // Secondary rejection: if something that can receive text input is
             // currently active, don't steal its Ctrl shortcuts.
             const active = document.activeElement;
-            if (active && $(active).is('input, textarea, select')) return false;
+            if (active && $(active).is('input, textarea, select, [contenteditable="true"]')) return false;
             return true;
         }
 
@@ -358,22 +358,30 @@ $(function () {
                 return;
             }
 
-            if ((e.key === 'Delete') && !e.altKey && !e.shiftKey) {
+            const key = e.key.toLowerCase();
+            const ctrl = e.ctrlKey || e.metaKey;
+
+            if ((key === 'delete' || key === 'backspace') && !e.altKey && !e.shiftKey) {
+                if (!isTableContext()) return;
                 e.preventDefault();
                 if (typeof deleteCell === 'function') deleteCell();
-            } else if (e.key === 'Insert' && !e.shiftKey && !e.repeat) {
+            } else if ((key === 'insert' || (ctrl && key === 'enter')) && !e.shiftKey && !e.repeat) {
+                // Insert or Ctrl/Cmd+Enter → Add Cell After
+                if (!isTableContext()) return;
                 e.preventDefault();
                 if (typeof addCell === 'function') addCell();
-            } else if (e.key === 'Insert' && e.shiftKey && !e.repeat) {
-                // Shift+Insert → Add Cell Before
+            } else if ((key === 'insert' || (ctrl && key === 'enter')) && e.shiftKey && !e.repeat) {
+                // Shift+Insert or Shift+Ctrl/Cmd+Enter → Add Cell Before
+                if (!isTableContext()) return;
                 e.preventDefault();
                 if (typeof addCellBefore === 'function') addCellBefore();
-            } else if (e.key === 'Delete' && e.shiftKey && !e.altKey) {
-                // Shift+Delete → Delete Cell (symmetric alias)
+            } else if ((key === 'delete' || key === 'backspace') && e.shiftKey && !e.altKey) {
+                // Shift+Delete/Backspace → Delete Cell
+                if (!isTableContext()) return;
                 e.preventDefault();
                 if (typeof deleteCell === 'function') deleteCell();
-            } else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-                // Ctrl+A → Select all cells — only when table is the active context
+            } else if (ctrl && key === 'a') {
+                // Ctrl+A → Select all cells
                 if (!isTableContext()) return;
                 e.preventDefault();
                 const $table = $(window.currentTable);
@@ -386,37 +394,42 @@ $(function () {
                 });
                 window.selectionAnchorCell = window.selectedCells[0] || null;
                 window.selectionHeadCell = window.selectedCells[window.selectedCells.length - 1] || null;
-            } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
-                // Ctrl+Shift+C → Copy selected cells (unique combo, no Monaco conflict)
-                if (window.selectedCells.length === 0) return;
+            } else if (ctrl && !e.shiftKey && key === 'c') {
+                // Ctrl/Cmd+C → Copy selected cells (only in table context; falls through to system copy otherwise)
+                if (!isTableContext() || window.selectedCells.length === 0) return;
                 e.preventDefault();
                 if (typeof copySelected === 'function') copySelected();
-            } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
-                // Ctrl+Shift+V → Paste Before (guarded: only fires when table has focus)
+            } else if (ctrl && e.shiftKey && key === 'v') {
+                // Ctrl+Shift+V → Paste Before
                 if (!isTableContext()) return;
                 e.preventDefault();
                 if (typeof pasteBefore === 'function') pasteBefore();
-            } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'v') {
-                // Ctrl+V → Paste After (guarded: only fires when tableHasFocus is true,
-                // so Monaco / browser paste is unaffected when Monaco is active)
+            } else if (ctrl && !e.shiftKey && key === 'v') {
+                // Ctrl+V → Paste After
                 if (!isTableContext()) return;
                 e.preventDefault();
                 if (typeof pasteAfter === 'function') pasteAfter();
-            } else if (e.altKey && e.shiftKey && e.key === 'W') {
+            } else if (e.altKey && e.shiftKey && e.code === 'KeyW') {
+                // Alt/Option+Shift+W → Merge (e.code avoids Mac Option producing Unicode chars)
+                if (!isTableContext()) return;
                 e.preventDefault();
                 if (typeof mergeCells === 'function') mergeCells();
-            } else if (e.altKey && e.shiftKey && e.key === 'T') {
+            } else if (e.altKey && e.shiftKey && e.code === 'KeyT') {
+                // Alt/Option+Shift+T → Text Split modal
+                if (!isTableContext()) return;
                 e.preventDefault();
                 $('#textSplitModal').modal('show');
-            } else if (e.altKey && e.shiftKey && e.key === 'X') {
+            } else if (e.altKey && e.shiftKey && e.code === 'KeyX') {
+                // Alt/Option+Shift+X → Apply text split
+                if (!isTableContext()) return;
                 e.preventDefault();
                 if (typeof applyTextSplit === 'function') applyTextSplit();
-            } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+            } else if (ctrl && key === 'z' && !e.shiftKey) {
                 e.preventDefault();
                 performUndo();
             }
             // Ctrl+Y or Ctrl+Shift+Z for redo
-            else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+            else if (ctrl && (key === 'y' || (key === 'z' && e.shiftKey))) {
                 e.preventDefault();
                 performRedo();
             }
