@@ -221,6 +221,7 @@
     <script src="src/js/core/tifany.js"></script>
     <!-- TAFNE Components -->
     <script src="src/js/components/visualGridMapper.js"></script>
+    <script src="src/js/components/tableRuler.js"></script>
     <script src="src/js/components/tableHistory.js"></script>
     <script src="src/js/components/cellStore.js"></script>
     <script src="src/js/components/nodeGraph.js"></script>
@@ -570,7 +571,7 @@
             <div id="nodeEditorCanvas" class="node-editor-canvas">
                 <div class="node-editor-header">
                     <span><i class="fas fa-project-diagram"></i> Node Editor</span>
-                    <div class="node-editor-header-actions" style="position:relative;">
+                    <div class="node-editor-header-actions">
                         <button id="neAddFromSheet" class="btn btn-sm btn-outline-primary"
                             title="Load current sheet as a node">
                             <i class="fas fa-plus"></i> Load Sheet
@@ -578,8 +579,6 @@
                         <button id="neAddNode" class="btn btn-sm btn-outline-secondary" title="Add operator node">
                             <i class="fas fa-shapes"></i> Add Node ▾
                         </button>
-                        <!-- Palette flyout -->
-                        <div id="nePalette" class="ne-palette" style="display:none;"></div>
                         <button id="neRunGraph" class="btn btn-sm btn-primary"
                             title="Run graph — execute all operator nodes">
                             <i class="fas fa-play"></i> Run
@@ -596,6 +595,8 @@
                         </button>
                         <button id="neExit" class="btn btn-sm btn-outline-secondary">Exit</button>
                     </div>
+                    <!-- Palette flyout: sibling of actions so overflow-x:auto on actions doesn't clip it -->
+                    <div id="nePalette" class="ne-palette" style="display:none;"></div>
                 </div>
                 <div id="nodeEditorViewport">
                     <!-- Visible composite canvas -->
@@ -830,10 +831,46 @@
         </div>
     </div>
 
+    <!-- ==================== TAB CONTEXT MENU ==================== -->
+    <div id="tabContextMenu" class="cell-controls" style="display:none">
+        <h6>Tab</h6>
+        <div class="cell-op">
+            <button id="tabCtxRename"    class="btn btn-sm btn-outline-primary py-0 px-1">Rename</button>
+            <button id="tabCtxAddBefore" class="btn btn-sm btn-outline-secondary py-0 px-1">Add Before</button>
+            <button id="tabCtxAddAfter"  class="btn btn-sm btn-outline-secondary py-0 px-1">Add After</button>
+        </div>
+        <h6>Delete</h6>
+        <div class="cell-op">
+            <button id="tabCtxDelete" class="btn btn-sm btn-outline-danger py-0 px-1">Delete Tab</button>
+        </div>
+    </div>
+
     <!-- Before/After cell options popup (outside context menu so Popper can position it freely) -->
     <div class="cell-options">
         <button class="beforeCell">Before</button>
         <button class="afterCell">After</button>
+    </div>
+
+    <!-- ==================== MULTI-CELL EDIT MODAL ==================== -->
+    <div class="modal fade" id="multiCellEditModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Selected Cells</h5>
+                    <small class="text-muted ml-2" id="multiCellEditFmt" style="font-size:11px;align-self:center"></small>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="multiCellMonacoContainer" style="height:260px;border-bottom:1px solid var(--t-border,#ddd)"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="applyMultiCellEdit">Apply</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- ==================== EDIT CELL MODAL ==================== -->
@@ -1011,6 +1048,28 @@
                         monaco.editor.setModelLanguage(window.tifanyMonacoInput.getModel(), lang);
                     });
                 }
+
+                // ── Multi-cell edit editor ──
+                var multiCellContainer = document.getElementById('multiCellMonacoContainer');
+                if (multiCellContainer) {
+                    window.tifanyMonacoMultiCell = monaco.editor.create(multiCellContainer, Object.assign({}, editorOptions, {
+                        language: 'plaintext',
+                        lineNumbers: 'on',
+                        wordWrap: 'off'
+                    }));
+                    // Layout then set value once the modal is actually visible
+                    $('#multiCellEditModal').on('shown.bs.modal', function () {
+                        if (!window.tifanyMonacoMultiCell) return;
+                        window.tifanyMonacoMultiCell.layout();
+                        if (window._multiCellPendingValue !== undefined) {
+                            window.tifanyMonacoMultiCell.setValue(window._multiCellPendingValue);
+                            window.tifanyMonacoMultiCell.setPosition({ lineNumber: 1, column: 1 });
+                            window.tifanyMonacoMultiCell.revealLine(1);
+                            delete window._multiCellPendingValue;
+                        }
+                    });
+                }
+
             });
         } else {
             // Monaco failed to load; show fallback textareas
@@ -1042,12 +1101,12 @@
                 if (isDark) {
                     document.documentElement.setAttribute('data-theme', 'light');
                     this.querySelector('.theme-icon').textContent = '☀';
-                    monaco.editor.setTheme('vs');
+                    if (window.monaco) monaco.editor.setTheme('vs');
                     localStorage.setItem('tifany-theme', 'light');
                 } else {
                     document.documentElement.setAttribute('data-theme', 'dark');
                     this.querySelector('.theme-icon').textContent = '☾';
-                    monaco.editor.setTheme('vs-dark');
+                    if (window.monaco) monaco.editor.setTheme('vs-dark');
                     localStorage.setItem('tifany-theme', 'dark');
                 }
             });

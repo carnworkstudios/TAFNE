@@ -36,6 +36,16 @@ function generateTabs(tableHtml) {
     $('#tableContainer').html(blocksHtml);
 
     setupTableInteraction();
+
+    // Build rulers after layout is painted so getBoundingClientRect() has real widths
+    if (typeof window.renderTableRulers === 'function') {
+        requestAnimationFrame(() => {
+            $('#tableContainer table.tablecoil').each(function () {
+                window.renderTableRulers(this);
+            });
+        });
+    }
+
     console.log(`Generated ${buttonIndex} tab(s) across ${$tables.length} table(s)`);
     $.toast({ heading: 'Done', text: `Generated ${buttonIndex} tabs`, icon: 'success', loader: false, stack: false });
 }
@@ -96,6 +106,11 @@ function generateCode() {
 
 function exportAsHtml() {
     const $clone = $('#tableContainer').clone();
+
+    // Strip ruler wrappers — replace each with just its table
+    $clone.find('.tafne-ruler-wrap').each(function () {
+        $(this).replaceWith($(this).find('table').first());
+    });
 
     if (crosshairEnabled) {
         $clone.find('table').addClass('crosshair-table');
@@ -161,7 +176,7 @@ function exportAsCsv(tableEl) {
     const { headers, rows } = getTableData(tableEl);
     const escapeCell = val => {
         const str = String(val);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
             return `"${str.replace(/"/g, '""')}"`;
         }
         return str;

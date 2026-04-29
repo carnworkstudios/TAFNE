@@ -269,9 +269,32 @@ $(function () {
         });
 
 
-        // Hide context menu when clicking elsewhere
+        // Hide context menus when clicking elsewhere
         $(document).on('click.hideMenu', function () {
-            $('#cellContextMenu').hide();
+            $('#cellContextMenu, #tabContextMenu').hide();
+        });
+
+        // Right-click context menu — shared handler for sp-option tabs and accordion headings
+        function showTabContextMenu(e, target) {
+            e.preventDefault();
+            e.stopPropagation();
+            window._tabCtxTarget = target;
+            const $menu = $('#tabContextMenu');
+            $menu.show();
+            const menuW = $menu.outerWidth(), menuH = $menu.outerHeight();
+            const vw = window.innerWidth, vh = window.innerHeight, pad = 8;
+            let x = e.clientX, y = e.clientY;
+            if (x + menuW + pad > vw) x = Math.max(pad, x - menuW);
+            if (y + menuH + pad > vh) y = Math.max(pad, vh - menuH - pad);
+            $menu.css({ top: y + 'px', left: x + 'px', display: 'grid', position: 'fixed' });
+        }
+
+        $container.off('contextmenu.spOption').on('contextmenu.spOption', '.sp-option', function (e) {
+            showTabContextMenu(e, this);
+        });
+
+        $container.off('contextmenu.accordionHeading').on('contextmenu.accordionHeading', 'button.accordion', function (e) {
+            showTabContextMenu(e, this);
         });
 
         // Returns true only when the active context is a table cell.
@@ -291,6 +314,15 @@ $(function () {
 
         $(document).off('keydown').on('keydown', function (e) {
             if (e.repeat) return;
+
+            // Alt+D — toggle drag-and-drop (global, works outside table context)
+            if (e.altKey && !e.shiftKey && e.code === 'KeyD') {
+                if (!$(e.target).is('input, textarea, select, [contenteditable="true"]')) {
+                    e.preventDefault();
+                    $('#toggleDragDrop').trigger('click');
+                    return;
+                }
+            }
 
             // Arrow-key table navigation (keyboard-first fallback included).
             if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
@@ -522,7 +554,7 @@ $(function () {
         });
 
         // Double click to rename accordion table headings
-        $container.off('click.tableHeading').on('click.tableHeading', 'button.accordion', function (e) {
+        $container.off('dblclick.tableHeading').on('dblclick.tableHeading', 'button.accordion', function (e) {
             //SAVE STATE BEFORE OPERATION
             window.saveCurrentState();
 
@@ -610,6 +642,15 @@ $(function () {
                 }
             }
         });
+
+        // Rebuild rulers after any structural table operation
+        if (typeof window.renderTableRulers === 'function') {
+            requestAnimationFrame(() => {
+                $('#tableContainer table.tablecoil').each(function () {
+                    window.renderTableRulers(this);
+                });
+            });
+        }
     }
 
     // Make setupTableInteraction globally accessible
@@ -855,11 +896,113 @@ $(function () {
     });
 
     $('.editCell').on('click', function () {
+        // Multi-cell: open Monaco editor with TSV representation of the selection
+        if (window.selectedCells && window.selectedCells.length > 1) {
+            if (typeof window.openMultiCellEdit === 'function') window.openMultiCellEdit();
+            return;
+        }
+        // Single-cell: original textarea modal
         if (!window.cellBeingEdited) return;
-
         const content = $(window.cellBeingEdited).html();
         $('#cellContent').val(content);
         $('#editCellModal').modal('show');
+    });
+
+    $('#applyMultiCellEdit').on('click', function () {
+        if (typeof window.applyMultiCellEdit === 'function') window.applyMultiCellEdit();
+    });
+
+    // ── Tab context menu actions ──────────────────────────────────────────────
+    // ── Tab context menu actions ──────────────────────────────────────────────
+    // Both sp-option buttons and accordion headings share these handlers;
+    // branch on the target's class to apply the right operation.
+
+    function _isAccordionTarget() {
+        return $(window._tabCtxTarget).hasClass('accordion');
+    }
+
+    function _makeAccordionPair(label) {
+        const $acc = $('<button>').addClass('accordion active').html(`<b>${label}</b>`);
+        const $panel = $('<div>').addClass('panel').html('<div class="sp-selector"></div>');
+        return { $acc, $panel };
+    }
+
+    $('#tabCtxRename').on('click', function () {
+        const $btn = $(window._tabCtxTarget);
+        if ($btn.length) $btn.trigger('dblclick'); // reuse existing inline-rename flow for both types
+        $('#tabContextMenu').hide();
+    });
+
+    $('#tabCtxAddAfter').on('click', function () {
+        const $btn = $(window._tabCtxTarget);
+        if (!$btn.length) return;
+        window.saveCurrentState();
+
+        if (_isAccordionTarget()) {
+            const tableCount = $('#tableContainer .accordion').length + 1;
+            const { $acc, $panel } = _makeAccordionPair(`Table ${tableCount}`);
+            // Insert after accordion + its panel sibling
+            $btn.next('.panel').after($panel).after($acc);
+            window.setupTableInteraction();
+        } else {
+            const $selector = $btn.closest('.sp-selector');
+            const nextVal   = $selector.find('.sp-option').length + 1;
+            $btn.after(
+                $('<button>').addClass('sp-option')
+                    .attr({ 'data-value': nextVal, 'data-panel': $btn.data('panel') })
+                    .text(nextVal)
+            );
+        }
+        $('#tabContextMenu').hide();
+    });
+
+    $('#tabCtxAddBefore').on('click', function () {
+        const $btn = $(window._tabCtxTarget);
+        if (!$btn.length) return;
+        window.saveCurrentState();
+
+        if (_isAccordionTarget()) {
+            const tableCount = $('#tableContainer .accordion').length + 1;
+            const { $acc, $panel } = _makeAccordionPair(`Table ${tableCount}`);
+            $btn.before($panel).before($acc);
+            window.setupTableInteraction();
+        } else {
+            const $selector = $btn.closest('.sp-selector');
+            const nextVal   = $selector.find('.sp-option').length + 1;
+            $btn.before(
+                $('<button>').addClass('sp-option')
+                    .attr({ 'data-value': nextVal, 'data-panel': $btn.data('panel') })
+                    .text(nextVal)
+            );
+        }
+        $('#tabContextMenu').hide();
+    });
+
+    $('#tabCtxDelete').on('click', function () {
+        const $btn = $(window._tabCtxTarget);
+        if (!$btn.length) return;
+
+        if (_isAccordionTarget()) {
+            if ($('#tableContainer .accordion').length <= 1) {
+                $.toast({ heading: 'Info', text: 'Cannot delete the only table section.', icon: 'warning', loader: false, stack: false });
+                $('#tabContextMenu').hide();
+                return;
+            }
+            window.saveCurrentState();
+            $btn.next('.panel').remove();
+            $btn.remove();
+            window.setupTableInteraction();
+        } else {
+            const $selector = $btn.closest('.sp-selector');
+            if ($selector.find('.sp-option').length <= 1) {
+                $.toast({ heading: 'Info', text: 'Cannot delete the only tab.', icon: 'warning', loader: false, stack: false });
+                $('#tabContextMenu').hide();
+                return;
+            }
+            window.saveCurrentState();
+            $btn.remove();
+        }
+        $('#tabContextMenu').hide();
     });
 
     $('#saveCellContent').on('click', function () {

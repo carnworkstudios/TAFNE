@@ -1854,10 +1854,10 @@ body.node-editor-active #sheetTabBar {
         display: none;
     }
 
-    /* Sheet tab bar: add bottom padding so last tab isn't clipped */
-    .sheet-tab-bar {
-        padding-bottom: 6px;
-    }
+    /* Sheet tab bar: move just below center-header so it's not hidden under mobileBottomNav */
+    .center-header   { order: 1; }
+    .sheet-tab-bar   { order: 2; border-top: none; border-bottom: 1px solid var(--t-border); }
+    .table-wrapper   { order: 3; }
 
     /* Context menu: better spacing and touch targets on mobile */
     .cell-controls {

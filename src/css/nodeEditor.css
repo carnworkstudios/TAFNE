@@ -27,8 +27,8 @@
     font-weight: 600;
     color: var(--t-text-muted);
     user-select: none;
-    overflow: visible;
-    /* allow palette flyout to extend beyond the header bar */
+    position: relative;   /* containing block for #nePalette */
+    overflow: visible;    /* allow palette flyout to drop below */
 }
 
 .node-editor-header>span:first-child {
@@ -36,14 +36,14 @@
     display: flex;
     align-items: center;
     gap: 6px;
-
 }
 
 .node-editor-header-actions {
     display: flex;
     align-items: center;
     gap: 6px;
-    overflow: auto;
+    overflow-x: auto;     /* buttons scroll when header is too narrow */
+    flex-shrink: 1;
 }
 
 /* ── Viewport (where canvas + HTML layer live) ─────────────────────────────── */
@@ -585,7 +585,7 @@
 .ne-palette {
     position: absolute;
     top: calc(100% + 4px);
-    left: 0;
+    right: 0;
     min-width: 220px;
     background: var(--t-bg-surface);
     border: 1px solid var(--t-border);

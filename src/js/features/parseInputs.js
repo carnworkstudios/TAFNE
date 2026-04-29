@@ -176,25 +176,88 @@ function parseAsciiInput(ascii) {
     return tableHtml;
 }
 
+// RFC 4180 compliant CSV tokeniser.
+// Rules applied:
+//   - Fields wrapped in " are quoted; they may contain commas and newlines
+//   - "" inside a quoted field is a literal double-quote
+//   - Single quotes are NOT qualifiers (treated as plain text)
+//   - Unquoted field values are trimmed of surrounding whitespace
+//   - Records separated by CRLF, LF, or bare CR; all three normalised
+//   - Blank lines are skipped
+function _parseRfc4180(csv) {
+    const records = [];
+    let pos = 0;
+    const len = csv.length;
+
+    while (pos < len) {
+        const record = [];
+
+        // Parse all fields in this record
+        while (true) {
+            let field = '';
+
+            if (pos < len && csv[pos] === '"') {
+                // Quoted field — consume until unescaped closing quote
+                pos++; // skip opening "
+                while (pos < len) {
+                    if (csv[pos] === '"') {
+                        if (pos + 1 < len && csv[pos + 1] === '"') {
+                            field += '"'; // "" → literal "
+                            pos += 2;
+                        } else {
+                            pos++; // consume closing "
+                            break;
+                        }
+                    } else {
+                        field += csv[pos++];
+                    }
+                }
+                // Skip any junk between closing quote and next comma/EOL (non-spec)
+                while (pos < len && csv[pos] !== ',' && csv[pos] !== '\r' && csv[pos] !== '\n') {
+                    pos++;
+                }
+            } else {
+                // Unquoted field — read until comma or line ending
+                while (pos < len && csv[pos] !== ',' && csv[pos] !== '\r' && csv[pos] !== '\n') {
+                    field += csv[pos++];
+                }
+                field = field.trim();
+            }
+
+            record.push(field);
+
+            if (pos < len && csv[pos] === ',') {
+                pos++; // comma → another field follows
+            } else {
+                break; // end of record
+            }
+        }
+
+        // Consume line ending: \r\n, \n, or \r
+        if (pos < len && csv[pos] === '\r') pos++;
+        if (pos < len && csv[pos] === '\n') pos++;
+
+        // Skip blank records (e.g. trailing newline)
+        if (!(record.length === 1 && record[0] === '')) {
+            records.push(record);
+        }
+    }
+
+    return records;
+}
+
 function parseCsvInput(csv) {
-    const lines = csv.split('\n').filter(line => line.trim());
-    if (lines.length === 0) return '';
+    const records = _parseRfc4180(csv);
+    if (records.length === 0) return '';
 
     let tableHtml = '<table class="tablecoil crosshair-table">';
-
-    lines.forEach((line, index) => {
-        const cells = line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
-
-        if (cells.length > 0) {
-            tableHtml += '<tr id="test">';
-            cells.forEach(cell => {
-                const isHeader = index === 0;
-                tableHtml += isHeader ? `<th>${cell}</th>` : `<td>${cell}</td>`;
-            });
-            tableHtml += '</tr>';
-        }
+    records.forEach((cells, index) => {
+        tableHtml += '<tr id="test">';
+        cells.forEach(cell => {
+            tableHtml += index === 0 ? `<th>${cell}</th>` : `<td>${cell}</td>`;
+        });
+        tableHtml += '</tr>';
     });
-
     tableHtml += '</table>';
     return tableHtml;
 }

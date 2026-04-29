@@ -448,11 +448,58 @@ function mergeCells() {
     const uniqueRows = new Set(selectionInfo.map(info => info.pos.startRow));
     const uniqueCols = new Set(selectionInfo.map(info => info.pos.startCol));
 
-    let isHorizontalMerge = uniqueRows.size === 1 && uniqueCols.size > 1;
-    let isVerticalMerge = uniqueCols.size === 1 && uniqueRows.size > 1;
+    const isHorizontalMerge = uniqueRows.size === 1 && uniqueCols.size > 1;
+    const isVerticalMerge   = uniqueCols.size === 1 && uniqueRows.size > 1;
+    const isRectMerge       = uniqueRows.size > 1   && uniqueCols.size > 1;
 
-    if (!isHorizontalMerge && !isVerticalMerge) {
+    if (!isHorizontalMerge && !isVerticalMerge && !isRectMerge) {
         $.toast({ heading: 'Info', text: 'Merging is only supported for cells in a single continuous row or column.', icon: 'warning', loader: false, stack: false });
+        return;
+    }
+
+    // ── Rectangular merge (multiple rows × multiple columns) ──────────────────
+    if (isRectMerge) {
+        const minRow = Math.min(...selectionInfo.map(i => i.pos.startRow));
+        const maxRow = Math.max(...selectionInfo.map(i => i.pos.startRow));
+        const minCol = Math.min(...selectionInfo.map(i => i.pos.startCol));
+        const maxCol = Math.max(...selectionInfo.map(i => i.pos.startCol));
+        const expected = (maxRow - minRow + 1) * (maxCol - minCol + 1);
+
+        if (selectionInfo.some(i => i.pos.colspan > 1 || i.pos.rowspan > 1)) {
+            $.toast({ heading: 'Info', text: 'Rectangular merge: unmerge all cells within the selection first.', icon: 'warning', loader: false, stack: false });
+            return;
+        }
+        if (selectionInfo.length !== expected) {
+            $.toast({ heading: 'Info', text: 'Rectangular merge: selection must form a complete rectangle.', icon: 'warning', loader: false, stack: false });
+            return;
+        }
+
+        const allContent = [];
+        const survivors  = [];
+
+        // Phase A — collapse each row horizontally
+        for (let r = minRow; r <= maxRow; r++) {
+            const row = selectionInfo
+                .filter(i => i.pos.startRow === r)
+                .sort((a, b) => a.pos.startCol - b.pos.startCol);
+            allContent.push(...row.map(i => $(i.cell).html()));
+            for (let j = 1; j < row.length; j++) $(row[j].cell).remove();
+            $(row[0].cell).attr('colspan', maxCol - minCol + 1);
+            survivors.push(row[0].cell);
+        }
+
+        // Phase B — collapse survivors vertically into the top cell
+        const $top = $(survivors[0]);
+        $top.html(allContent.join(' '));
+        $top.attr('rowspan', maxRow - minRow + 1);
+        for (let i = 1; i < survivors.length; i++) $(survivors[i]).remove();
+
+        window.selectedCells = [survivors[0]];
+        $(window.currentTable).find('.selected-cell').removeClass('selected-cell');
+        $top.addClass('selected-cell');
+        window.saveCurrentState();
+        $.toast({ heading: 'Success', text: 'Cells merged', icon: 'success', loader: false, stack: false });
+        window.setupTableInteraction();
         return;
     }
 
@@ -504,14 +551,92 @@ function mergeCells() {
     window.setupTableInteraction();
 }
 
+// ── Multi-cell Monaco editor ──────────────────────────────────────────────────
+//
+//   openMultiCellEdit()  — shows bounding-box cells in Monaco: newline = row, | = col
+//   applyMultiCellEdit() — parses Monaco content back into cells
+
+function openMultiCellEdit() {
+    const cells = window.selectedCells;
+    if (!cells || cells.length < 2) return;
+    const table = window.currentTable;
+    if (!table) return;
+
+    const mapper = new VisualGridMapper(table);
+    const posMap = new Map();
+    let minRow = Infinity, maxRow = -Infinity;
+    let minCol = Infinity, maxCol = -Infinity;
+
+    cells.forEach(cell => {
+        const pos = mapper.getVisualPosition(cell);
+        if (!pos) return;
+        posMap.set(`${pos.startRow},${pos.startCol}`, cell);
+        minRow = Math.min(minRow, pos.startRow);
+        maxRow = Math.max(maxRow, pos.startRow);
+        minCol = Math.min(minCol, pos.startCol);
+        maxCol = Math.max(maxCol, pos.startCol);
+    });
+
+    // Build Monaco content: each row on its own line, columns separated by " | "
+    const lines = [];
+    for (let r = minRow; r <= maxRow; r++) {
+        const parts = [];
+        for (let c = minCol; c <= maxCol; c++) {
+            const cell = posMap.get(`${r},${c}`);
+            parts.push(cell ? $(cell).html() : '');
+        }
+        lines.push(parts.join(' | '));
+    }
+
+    window._multiCellEditState = { posMap, minRow, maxRow, minCol, maxCol };
+    // Store value here; shown.bs.modal handler applies it after layout() runs
+    window._multiCellPendingValue = lines.join('\n');
+
+    const numRows = maxRow - minRow + 1;
+    const numCols = maxCol - minCol + 1;
+    $('#multiCellEditFmt').text(`${numRows} × ${numCols}  —  newline = row  |  pipe = col`);
+
+    $('#multiCellEditModal').modal('show');
+}
+
+function applyMultiCellEdit() {
+    const state = window._multiCellEditState;
+    if (!state || !window.tifanyMonacoMultiCell) return;
+
+    const { posMap, minRow, maxRow, minCol, maxCol } = state;
+    const raw   = window.tifanyMonacoMultiCell.getValue();
+    const lines = raw.split('\n');
+
+    window.saveCurrentState();
+
+    lines.forEach((line, lineIdx) => {
+        const r = minRow + lineIdx;
+        if (r > maxRow) return;
+        line.split('|').forEach((value, colIdx) => {
+            const c = minCol + colIdx;
+            if (c > maxCol) return;
+            const cell = posMap.get(`${r},${c}`);
+            if (cell) $(cell).html(value.trim());
+        });
+    });
+
+    window._multiCellEditState  = null;
+    window._multiCellPendingValue = undefined;
+    $('#multiCellEditModal').modal('hide');
+    window.setupTableInteraction();
+    $.toast({ heading: 'Done', text: 'Cells updated', icon: 'success', loader: false, stack: false });
+}
+
 // Make functions globally accessible
-window.addCell = addCell;
-window.addCellBefore = addCellBefore;
-window.deleteCell = deleteCell;
-window.deleteRows = deleteRows;
-window.deleteColumns = deleteColumns;
-window.addRow = addRow;
-window.addRowBefore = addRowBefore;
-window.addColumn = addColumn;
+window.addCell         = addCell;
+window.addCellBefore   = addCellBefore;
+window.deleteCell      = deleteCell;
+window.deleteRows      = deleteRows;
+window.deleteColumns   = deleteColumns;
+window.addRow          = addRow;
+window.addRowBefore    = addRowBefore;
+window.addColumn       = addColumn;
 window.addColumnBefore = addColumnBefore;
-window.mergeCells = mergeCells;
+window.mergeCells      = mergeCells;
+window.openMultiCellEdit  = openMultiCellEdit;
+window.applyMultiCellEdit = applyMultiCellEdit;

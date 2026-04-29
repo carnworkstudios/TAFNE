@@ -474,7 +474,7 @@ tr.accordion-header.actives > td {
     }
 
     .freeze-pane {
-        display: sticky;
+        position: sticky;
         left: 0;
         background-color: aliceblue;
 
@@ -554,4 +554,106 @@ tr.accordion-header.actives > td {
 
 .col-drop-target-right {
     border-right: 3px solid #337ab7 !important;
+}
+
+/* ── Table Ruler ─────────────────────────────────────────────────────────── */
+
+.tafne-ruler-wrap {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Top row: corner + column-ruler viewport */
+.tafne-ruler-header {
+    display: flex;
+    flex-direction: row;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--t-bg-workspace);
+}
+
+/* Corner cap (top-left intersection) */
+.tafne-corner {
+    width: 28px;
+    height: 22px;
+    flex-shrink: 0;
+    background: var(--t-bg-surface);
+    border-right: 1px solid var(--t-border);
+    border-bottom: 1px solid var(--t-border);
+    box-sizing: border-box;
+}
+
+/* Viewport that clips the col ruler — scrollLeft sync'd by JS */
+.tafne-col-ruler-vp {
+    overflow: hidden;
+    flex: 1;
+    border-bottom: 1px solid var(--t-border);
+}
+
+/* Column numbers strip (actual width = sum of col widths) */
+.tafne-col-ruler {
+    display: flex;
+    flex-direction: row;
+    background: var(--t-bg-surface);
+}
+
+/* Middle row: row numbers + table viewport */
+.tafne-ruler-body {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+}
+
+/* Row numbers strip — outside the horizontal scroll viewport, always visible */
+.tafne-row-ruler {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    width: 28px;
+    background: var(--t-bg-surface);
+    border-right: 1px solid var(--t-border);
+}
+
+/* Table's own horizontal scroll container */
+.tafne-table-vp {
+    overflow-x: auto;
+    flex: 1;
+}
+
+/* Shared segment styles */
+.tafne-col-ruler .ruler-seg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    border-right: 1px solid var(--t-border);
+    box-sizing: border-box;
+    font-size: 10px;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    color: var(--t-text-muted);
+    user-select: none;
+    flex-shrink: 0;
+    transition: background 0.1s, color 0.1s;
+}
+
+.tafne-row-ruler .ruler-seg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    border-bottom: 1px solid var(--t-border);
+    box-sizing: border-box;
+    font-size: 10px;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    color: var(--t-text-muted);
+    user-select: none;
+    transition: background 0.1s, color 0.1s;
+}
+
+/* Active highlight when cell(s) selected */
+.ruler-seg.ruler-active {
+    background: var(--t-active-bg);
+    color: var(--t-primary);
+    font-weight: 600;
 }

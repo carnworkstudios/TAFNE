@@ -485,7 +485,7 @@
             <div id="nodeEditorCanvas" class="node-editor-canvas">
                 <div class="node-editor-header">
                     <span><i class="fas fa-project-diagram"></i> Node Editor</span>
-                    <div class="node-editor-header-actions" style="position:relative;">
+                    <div class="node-editor-header-actions">
                         <button id="neAddFromSheet" class="btn btn-sm btn-outline-primary"
                             title="Load current sheet as a node">
                             <i class="fas fa-plus"></i> Load Sheet
@@ -493,8 +493,6 @@
                         <button id="neAddNode" class="btn btn-sm btn-outline-secondary" title="Add operator node">
                             <i class="fas fa-shapes"></i> Add Node ▾
                         </button>
-                        <!-- Palette flyout -->
-                        <div id="nePalette" class="ne-palette" style="display:none;"></div>
                         <button id="neRunGraph" class="btn btn-sm btn-primary"
                             title="Run graph — execute all operator nodes">
                             <i class="fas fa-play"></i> Run
@@ -511,6 +509,8 @@
                         </button>
                         <button id="neExit" class="btn btn-sm btn-outline-secondary">Exit</button>
                     </div>
+                    <!-- Palette flyout: sibling of actions so overflow-x:auto on actions doesn't clip it -->
+                    <div id="nePalette" class="ne-palette" style="display:none;"></div>
                 </div>
                 <div id="nodeEditorViewport">
                     <!-- Visible composite canvas -->
