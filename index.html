@@ -1281,24 +1281,29 @@
                 if (btn) btn.style.display = '';
             }
 
-            // Flow 1 receive: Schema Editor → TAFNE (load-netlist)
+            // Flow 1 receive: Schema Editor → TAFNE (load-diagram / load-netlist)
             CwsBridge.onData(async function (envelope) {
-                if (envelope?.hints?.action !== 'load-netlist') return;
+                var action = envelope?.hints?.action;
+                if (action !== 'load-diagram' && action !== 'load-netlist') return;
                 var raw;
                 try {
                     raw = envelope.pointer
                         ? await CwsBridge.getStore(envelope.pointer)
                         : envelope.inline;
                 } catch (e) {
-                    $.toast({ heading: 'TAFNE', text: 'Failed to fetch netlist: ' + e.message, icon: 'error', loader: false, stack: false });
+                    $.toast({ heading: 'TAFNE', text: 'Failed to fetch diagram: ' + e.message, icon: 'error', loader: false, stack: false });
                     return;
                 }
-                var netlist;
-                try { netlist = JSON.parse(raw); } catch (e) {
+                var data;
+                try { data = JSON.parse(raw); } catch (e) {
                     $.toast({ heading: 'TAFNE', text: 'Bad JSON from Schema Editor', icon: 'error', loader: false, stack: false });
                     return;
                 }
-                if (typeof loadNetlistAsSheets === 'function') loadNetlistAsSheets(netlist);
+                if (data.schema === 'ginexys-diagram-v1' && typeof loadDiagramAsSheets === 'function') {
+                    loadDiagramAsSheets(data);
+                } else if (typeof loadNetlistAsSheets === 'function') {
+                    loadNetlistAsSheets(data);
+                }
             });
 
             // Flow 2 send: TAFNE → Schema Editor (back-annotate)

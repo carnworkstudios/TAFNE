@@ -67,6 +67,87 @@ function loadNetlistAsSheets(netlist) {
 window.loadNetlistAsSheets = loadNetlistAsSheets;
 
 /**
+ * Build sheets from a ginexys-diagram-v1 payload received over CwsBridge.
+ * Creates up to four sheets: Components, Wires, Connections, Connectors.
+ */
+function loadDiagramAsSheets(diagram) {
+    if (!diagram || diagram.schema !== 'ginexys-diagram-v1') {
+        $.toast({ heading: 'TAFNE', text: 'Invalid diagram format', icon: 'error', loader: false, stack: false });
+        return;
+    }
+    const t = diagram.topology || {};
+
+    // Components — rich: refdes, symbolType, ports from DOM + GeoEngine
+    const comps = t.components || [];
+    if (comps.length) {
+        const rows = comps.map(c => ({
+            id:         c.id              || '',
+            refdes:     c.refdes          || '',
+            value:      c.value           || '',
+            symbol:     c.symbolType || c.type || '',
+            domain:     c.domain          || '',
+            x:          c.x     != null   ? String(c.x)    : '',
+            y:          c.y     != null   ? String(c.y)    : '',
+            bbox_w:     c.bbox?.width  != null ? String(c.bbox.width)  : '',
+            bbox_h:     c.bbox?.height != null ? String(c.bbox.height) : '',
+        }));
+        addSheet('Components', parseJsonInput(JSON.stringify(rows)));
+    }
+
+    // Wires — geometry + linearity from GeoEngine
+    const wires = t.wires || [];
+    if (wires.length) {
+        const rows = wires.map(w => {
+            const ep0 = w.endpoints?.[0];
+            const ep1 = w.endpoints?.[1];
+            return {
+                id:        w.id           || '',
+                color:     w.color        || '',
+                width:     w.width  != null ? String(w.width) : '',
+                length:    w.length != null ? String(Math.round(w.length)) : '',
+                linearity: w.linearity != null ? String(w.linearity.toFixed(3)) : '',
+                from_x:    ep0?.x != null ? String(ep0.x.toFixed(1)) : '',
+                from_y:    ep0?.y != null ? String(ep0.y.toFixed(1)) : '',
+                to_x:      ep1?.x != null ? String(ep1.x.toFixed(1)) : '',
+                to_y:      ep1?.y != null ? String(ep1.y.toFixed(1)) : '',
+            };
+        });
+        addSheet('Wires', parseJsonInput(JSON.stringify(rows)));
+    }
+
+    // Connections — graph topology (node-to-node edges)
+    const edges = t.graph?.edges || [];
+    if (edges.length) {
+        const rows = edges.map(e => ({
+            id:     e.id     || '',
+            from:   e.from   || '',
+            to:     e.to     || '',
+            color:  e.color  || '',
+            length: e.length != null ? String(Math.round(e.length)) : '',
+        }));
+        addSheet('Connections', parseJsonInput(JSON.stringify(rows)));
+    }
+
+    // Connectors — pin-points (only if present)
+    const connectors = t.connectors || [];
+    if (connectors.length) {
+        const rows = connectors.map(c => ({
+            id:     c.id || '',
+            bbox_x: c.bbox?.x != null ? String(c.bbox.x.toFixed(1)) : '',
+            bbox_y: c.bbox?.y != null ? String(c.bbox.y.toFixed(1)) : '',
+        }));
+        addSheet('Connectors', parseJsonInput(JSON.stringify(rows)));
+    }
+
+    $.toast({
+        heading: 'Diagram Loaded',
+        text: `${comps.length} components · ${wires.length} wires · ${edges.length} connections`,
+        icon: 'success', loader: false, stack: false,
+    });
+}
+window.loadDiagramAsSheets = loadDiagramAsSheets;
+
+/**
  * Switch to a different sheet by id.
  */
 function switchSheet(id) {
