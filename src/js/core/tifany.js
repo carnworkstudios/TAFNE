@@ -1156,4 +1156,27 @@ $(function () {
 
     // Initialize
     initializeAllFeatures();
+
+    // =================== VS CODE EXTENSION BOOT ===================
+    // When opened via the Ginexys VS Code extension, the extension injects
+    // window.__GINEXYS_INITIAL_FILE__ before </body>. Route its content
+    // through the existing parser chain so no parsing logic is duplicated.
+    if (window.__GINEXYS_INITIAL_FILE__) {
+        var _gif = window.__GINEXYS_INITIAL_FILE__;
+        var _extTypeMap = {
+            '.csv':  'csv',
+            '.tsv':  'csv',
+            '.md':   'markdown',
+            '.sql':  'sql',
+            '.json': 'json',
+        };
+        var _inputType = _extTypeMap[_gif.ext] || 'csv';
+        $('#inputType').val(_inputType);
+        if (window.tifanyMonacoInput) {
+            window.tifanyMonacoInput.setValue(_gif.content);
+        } else {
+            $('#tableInput').val(_gif.content);
+        }
+        if (typeof parseInput === 'function') parseInput();
+    }
 });
