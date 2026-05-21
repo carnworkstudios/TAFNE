@@ -1179,4 +1179,85 @@ $(function () {
         }
         if (typeof parseInput === 'function') parseInput();
     }
+
+    // Live sync from VS Code text editor → table re-render.
+    // Updates sheets in-place so we never call addSheet() on every keystroke
+    // (which would create thousands of tabs).
+    if (window.CwsBridge?.isEmbedded) {
+        window.addEventListener('message', function (e) {
+            if (e.data?.type !== 'ginexys:document-changed') { return; }
+            ginexysUpdateSheets(e.data.payload.sheets);
+        });
+    }
+
+    function ginexysUpdateSheets(sheetsData) {
+        if (!sheetsData || !sheetsData.length) { return; }
+
+        var parsers = {
+            'csv':      typeof parseCsvInput      === 'function' ? parseCsvInput      : null,
+            'html':     typeof parseHtmlInput     === 'function' ? parseHtmlInput     : null,
+            'json':     typeof parseJsonInput     === 'function' ? parseJsonInput     : null,
+            'markdown': typeof parseMarkdownInput === 'function' ? parseMarkdownInput : null,
+            'sql':      typeof parseSqlInput      === 'function' ? parseSqlInput      : null,
+            'text':     typeof parseTextInput     === 'function' ? parseTextInput     : null,
+        };
+
+        sheetsData.forEach(function (data, i) {
+            var parser = parsers[data.format] || parsers['csv'];
+            if (!parser || !data.content.trim()) { return; }
+
+            var rawHtml;
+            try { rawHtml = parser(data.content.trim()); } catch (err) { return; }
+            if (!rawHtml) { return; }
+
+            if (i < window.sheets.length) {
+                // Patch existing sheet — no new tab created
+                var sheet = window.sheets[i];
+                sheet.name   = data.name || sheet.name;
+                sheet.rawHtml = rawHtml;
+                sheet.containerHtml = null; // force re-render on next activate
+
+                if (sheet.id === window.activeSheetId) {
+                    window.lastParsedHtml = rawHtml;
+                    if (typeof generateTabs === 'function')         { generateTabs(rawHtml); }
+                    window.currentTable = $('#tableContainer table')[0] || null;
+                    if (typeof initializeAllFeatures === 'function') { initializeAllFeatures(); }
+                    if (typeof setupTableInteraction === 'function') { setupTableInteraction(); }
+                    if (typeof window.saveCurrentState === 'function') { window.saveCurrentState(); }
+                    if (typeof renderSheetTabs === 'function')       { renderSheetTabs(); }
+                }
+            } else {
+                // Extra sheet from new fenced block — push directly, skip addSheet()
+                if (window.activeSheetId !== null && typeof _saveActiveSheetState === 'function') {
+                    _saveActiveSheetState();
+                }
+                var id = 'sheet-' + (++window._sheetCounter);
+                window.sheets.push({ id: id, name: data.name || ('Sheet ' + window._sheetCounter), rawHtml: rawHtml, containerHtml: null });
+                window.lastParsedHtml = rawHtml;
+                if (typeof renderSheetTabs === 'function') { renderSheetTabs(); }
+            }
+        });
+
+        // Remove sheets that no longer have a corresponding fenced block
+        while (window.sheets.length > sheetsData.length) {
+            var last = window.sheets[window.sheets.length - 1];
+            if (last.id !== window.activeSheetId && typeof deleteSheet === 'function') {
+                deleteSheet(last.id);
+            } else {
+                break; // active sheet is the last one — leave it
+            }
+        }
+    }
+
+    // Mode routing: switch to the requested mode after the tool finishes initializing.
+    if (window.__GINEXYS_INITIAL_MODE__) {
+        var _mode = window.__GINEXYS_INITIAL_MODE__;
+        setTimeout(function () {
+            if (_mode === 'node-editor' && typeof enableNodeEditor === 'function') {
+                enableNodeEditor();
+            } else if (_mode === 'lab' && typeof toggleLab === 'function') {
+                if (!window.labModeEnabled) toggleLab();
+            }
+        }, 150);
+    }
 });
