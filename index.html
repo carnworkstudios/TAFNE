@@ -281,10 +281,10 @@
                 style="margin-left:auto; border: 2px solid; border-radius: 50%;font-size: 0.6rem;">?</a>
         </nav>
         <!-- CWS: back-annotate to Schema Editor (hidden when standalone) -->
-        <button id="backAnnotateBtn" class="btn btn-sm" title="Back-annotate component labels to Schema Editor"
+        <!-- <button id="backAnnotateBtn" class="btn btn-sm" title="Back-annotate component labels to Schema Editor"
             style="display:none; background: rgba(79, 172, 254, 0.15); border: 1px solid rgba(79, 172, 254, 0.4); color: #4facfe; font-weight: 600; margin-left: 12px;">
             <i class="fas fa-reply"></i> Back-Annotate
-        </button>
+        </button> -->
     </header>
     <!-- ==================== FIRST-VISIT BANNER ==================== -->
     <div id="tafne-welcome-banner"
@@ -342,10 +342,20 @@
                 <i class="fas fa-database"></i>
             </button>
 
-            <!-- CWS: back-annotate to Schema Editor (hidden when standalone) -->
-            <button id="backAnnotateBtn" class="theme-toggle-btn"
-                title="Back-annotate component labels to Schema Editor" style="display:none;">
-                <i class="fas fa-reply"></i>
+            <!-- Back-Annotate to Schema Editor — Pro gate -->
+            <div class="input-toolbar-divider"></div>
+            <div style="position:relative; display:inline-block;">
+                <button id="backAnnotateBtn" class="theme-toggle-btn gx-pro-locked"
+                    title="Back-Annotate to Schema Editor (Pro)" style="display:none;">
+                    <i class="fas fa-reply"></i>
+                </button>
+                <div class="gx-pro-interceptor" data-pro-feature="back-annotate" id="backAnnotateProGate" style="display:none;"></div>
+            </div>
+
+            <!-- Ginexys Send To — round logo button, opens IPC panel in OS or waitlist standalone -->
+            <div class="input-toolbar-divider"></div>
+            <button id="tafneSendBtn" class="gx-tool-send-btn" title="Send to another Ginexys tool (Pro)">
+                <img src="/assets/img/Ginexys_Logo.png" width="18" height="18" alt="Ginexys" style="border-radius:50%;display:block;">
             </button>
         </div>
 
@@ -1275,13 +1285,41 @@
 
     <!-- ==================== CWS IPC: SCHEMA EDITOR BRIDGE ==================== -->
     <script>
+        // Wire Ginexys Send button — always present, works standalone or embedded
+        (function () {
+            var sendBtn = document.getElementById('tafneSendBtn');
+            if (!sendBtn) return;
+            sendBtn.addEventListener('click', function () {
+                if (window.parent !== window && window.parent.OsShell) {
+                    window.parent.postMessage({ type: 'gx:open-ipc-panel' }, '*');
+                } else {
+                    var GxM = window.GxModals;
+                    if (GxM) GxM.open('pro_waitlist', {
+                        featureSlug: 'ipc-cross-tool',
+                        subtitle: 'Send your TAFNE data to PDF Processor or Schema Editor. Cross-tool flow is a Pro feature.',
+                    });
+                }
+            });
+        })();
+
         (function () {
             if (!window.CwsBridge) return;
-            // Reveal back-annotate button only when embedded in OsShell
+            // Reveal back-annotate button (and its Pro gate) when embedded in OsShell
             if (CwsBridge.isEmbedded) {
                 var btn = document.getElementById('backAnnotateBtn');
+                var gate = document.getElementById('backAnnotateProGate');
                 if (btn) btn.style.display = '';
+                if (gate) gate.style.display = '';
             }
+
+            // Delegated interceptor: clicking the Pro gate overlay opens the waitlist modal
+            document.addEventListener('click', function (e) {
+                var interceptor = e.target.closest('.gx-pro-interceptor');
+                if (!interceptor) return;
+                var featureSlug = interceptor.dataset.proFeature;
+                var GxM = (window.parent && window.parent.GxModals) ? window.parent.GxModals : window.GxModals;
+                if (GxM) GxM.open('pro_waitlist', { featureSlug: featureSlug, subtitle: 'Back-Annotate sends your TAFNE component data back to Schema Editor. This is a Pro feature.' });
+            });
 
             // Flow 1 receive: Schema Editor → TAFNE (load-diagram / load-netlist)
             CwsBridge.onData(async function (envelope) {
