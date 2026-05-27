@@ -343,13 +343,13 @@
 
 /* ── Responsive: hide minimap on small containers ─────────────────────────── */
 @media (max-width: 600px) {
-    .node-editor-minimap {
+    /* .node-editor-minimap {
         display: none;
-    }
+    } */
 
-    .node-editor-header-actions .btn {
+    /* .node-editor-header-actions .btn {
         display: none;
-    }
+    } */
 
     .node-editor-header-actions .btn:last-child {
         display: inline-flex;

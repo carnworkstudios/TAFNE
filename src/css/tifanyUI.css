@@ -106,6 +106,62 @@ body {
     background: var(--t-hover-bg);
 }
 
+/* ── Mode tab pill group ── */
+.table-mode {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 10px;
+    background: #bebec7;
+    box-shadow:
+        inset 2px 2px 5px rgba(0, 0, 0, 0.12),
+        inset -1px -1px 3px rgba(255, 255, 255, 0.55);
+    flex-shrink: 0;
+}
+
+[data-theme="dark"] .table-mode {
+    background: #d4d6d9;
+    box-shadow:
+        inset 2px 2px 6px rgba(0, 0, 0, 0.45),
+        inset -1px -1px 3px rgba(255, 255, 255, 0.04);
+}
+
+.table-mode .theme-toggle-btn {
+    border: none;
+    border-radius: 7px;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--t-text-muted);
+    font-size: 13px;
+    transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.table-mode .theme-toggle-btn:hover {
+    background: var(--t-hover-bg);
+    color: var(--t-text);
+    box-shadow: none;
+}
+
+.table-mode .theme-toggle-btn.active {
+    background: var(--t-bg-surface);
+    color: var(--t-primary);
+    box-shadow:
+        2px 2px 6px rgba(0, 0, 0, 0.14),
+        -1px -1px 4px rgba(255, 255, 255, 0.7);
+}
+
+[data-theme="dark"] .table-mode .theme-toggle-btn.active {
+    background: var(--t-bg-surface);
+    color: var(--t-primary);
+    box-shadow:
+        2px 2px 6px rgba(0, 0, 0, 0.5),
+        -1px -1px 3px rgba(255, 255, 255, 0.06);
+}
+
 /* Theme toggle button */
 .theme-toggle-btn {
     background: none;
@@ -1140,7 +1196,7 @@ body.lab-mode-active .tifany-center-panel {
 
 /* Toolbar button active state */
 body.lab-mode-active #labModeToggle {
-    background: var(--t-active-bg);
+    background: var(--t-bg-surface);
     color: var(--t-primary);
     border-color: var(--t-primary);
 }
@@ -1606,7 +1662,7 @@ body.lab-mode-active #labModeToggle {
 
 /* Toolbar button active state */
 body.node-editor-active #nodeEditorToggle {
-    background: var(--t-active-bg);
+    background: var(--t-bg-surface);
     color: var(--t-primary);
     border-color: var(--t-primary);
 }
@@ -1721,6 +1777,23 @@ body.node-editor-active #sheetTabBar {
    MOBILE LAYOUT (≤767px)
    =========================== */
 @media (max-width: 767px) {
+
+    /* Mode pills stack vertically on mobile */
+    .table-mode {
+        flex-direction: row;
+        border-radius: 10px;
+        padding: 3px;
+    }
+
+    .table-mode .theme-toggle-btn {
+        width: 32px;
+        height: 32px;
+    }
+
+    /* turn off sidebar */
+    #toggleLeftPanel {
+        display: none;
+    }
 
     /* Icon rail: vertical → horizontal strip at top of app */
     #sidebar-nav-mount {
