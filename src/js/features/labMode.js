@@ -48,9 +48,10 @@ function enableLab() {
     // Load data from the active table
     _labLoadFromSheet();
 
-    // Show lab canvas, hide table view
+    // Show lab canvas, hide table view — collapse side panels for full width
     $('.table-wrapper').hide();
     $('#sheetTabBar').hide();
+    $('.tifany-left-panel, .tifany-right-panel').hide();
     $('#labCanvas').css('display', 'flex');
     document.body.classList.add('lab-mode-active');
 
@@ -88,6 +89,7 @@ function disableLab() {
     $('#labCanvas').hide();
     $('.table-wrapper').show();
     $('#sheetTabBar').show();
+    $('.tifany-left-panel, .tifany-right-panel').show();
     document.body.classList.remove('lab-mode-active');
 
     // Restore Monaco to writable (in case drawMode is ever re-enabled)

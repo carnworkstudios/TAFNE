@@ -242,7 +242,7 @@ body {
 
 /* --- Left panel --- */
 .tifany-left-panel {
-    width: 264px;
+    width: 180px;
     min-width: 200px;
     overflow-y: auto;
     border-right: 1px solid var(--t-border);
@@ -270,8 +270,8 @@ body {
 
 /* --- Right panel --- */
 .tifany-right-panel {
-    width: 300px;
-    min-width: 220px;
+    width: 220px;
+    min-width: 150px;
     max-width: 600px;
     overflow-y: auto;
     border-left: 1px solid var(--t-border);

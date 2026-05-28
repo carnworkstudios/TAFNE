@@ -263,6 +263,8 @@
     ></script>
     <!-- GSAP (pinned 3.12.2 — same version as schema-editor; used by Node Editor renderer) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <!-- DOMPurify -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 
     <!-- TAFNE Core -->
     <script src="src/js/core/tifany.js"></script>
@@ -1076,11 +1078,11 @@
             style="display: flex; flex-direction: row; gap: 10px"
           >
             <!-- Drag & Drop switch -->
-            <label class="toolbar-switch-label" title="Toggle Drag &amp; Drop">
+            <!-- <label class="toolbar-switch-label" title="Toggle Drag &amp; Drop">
               <input type="checkbox" id="dragDropSwitch" />
               <span class="toolbar-switch-track"></span>
               <span class="toolbar-switch-text">DRAG-DROP</span>
-            </label>
+            </label> -->
 
             <div class="input-toolbar-divider"></div>
 
@@ -1106,11 +1108,11 @@
         <!-- Table editing area -->
         <div class="table-wrapper">
           <!-- contenteditable="true" -->
-          <p
+          <!-- <p
             contenteditable="true"
             data-text="Table View"
             class="text-center"
-          ></p>
+          ></p> -->
           <div class="table-container" id="tableContainer"></div>
         </div>
 

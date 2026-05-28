@@ -10,7 +10,8 @@ function generateTabs(tableHtml) {
     const $tables = $parsed.find('table');
 
     if ($tables.length === 0) {
-        $('#tableContainer')[0].innerHTML = tableHtml;
+        const cleanHtml = window.DOMPurify ? window.DOMPurify.sanitize(tableHtml, { ALLOW_DATA_ATTR: true }) : tableHtml;
+        $('#tableContainer')[0].innerHTML = cleanHtml;
         setupTableInteraction();
         return;
     }
@@ -33,7 +34,8 @@ function generateTabs(tableHtml) {
             `<div class="panel">${spHtml}${tableOuterHtml}</div>`;
     });
 
-    $('#tableContainer')[0].innerHTML = blocksHtml;
+    const cleanBlocks = window.DOMPurify ? window.DOMPurify.sanitize(blocksHtml, { ALLOW_DATA_ATTR: true }) : blocksHtml;
+    $('#tableContainer')[0].innerHTML = cleanBlocks;
 
     setupTableInteraction();
 

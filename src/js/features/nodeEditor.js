@@ -29,9 +29,10 @@ function enableNodeEditor() {
     // Save the current sheet state so it survives the mode switch
     if (typeof _saveActiveSheetState === 'function') _saveActiveSheetState();
 
-    // Swap views
+    // Swap views — collapse side panels so node editor gets full width
     $('.table-wrapper').hide();
     $('#sheetTabBar').hide();
+    $('.tifany-left-panel, .tifany-right-panel').hide();
     $('#nodeEditorCanvas').css('display', 'flex');
     document.body.classList.add('node-editor-active');
 
@@ -93,10 +94,11 @@ function disableNodeEditor() {
     window.NodeGraph.wires = {};
     window.cellStoreManager.clear();
 
-    // Swap views back
+    // Swap views back — restore side panels
     $('#nodeEditorCanvas').hide();
     $('.table-wrapper').show();
     $('#sheetTabBar').show();
+    $('.tifany-left-panel, .tifany-right-panel').show();
     document.body.classList.remove('node-editor-active');
 
     $.toast({ heading: 'Node Editor', text: 'Returned to table view', icon: 'info', loader: false, stack: false });
@@ -124,7 +126,6 @@ function _loadSheetsAsNodes() {
     let idx = 0;
 
     window.sheets.forEach(sheet => {
-        // Use the live container HTML for the active sheet; saved state for others
         let html = '';
         if (sheet.id === window.activeSheetId) {
             html = $('#tableContainer').html();
@@ -132,7 +133,8 @@ function _loadSheetsAsNodes() {
             html = sheet.containerHtml || sheet.rawHtml || '';
         }
 
-        const $temp  = $('<div>').html(html);
+        const cleanHtml = window.DOMPurify ? window.DOMPurify.sanitize(html, { ALLOW_DATA_ATTR: true }) : html;
+        const $temp  = $('<div>').html(cleanHtml);
         const $table = $temp.find('table').first();
 
         if (!$table.length) { idx++; return; }

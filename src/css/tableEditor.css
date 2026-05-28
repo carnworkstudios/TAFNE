@@ -563,7 +563,8 @@ tr.accordion-header.actives > td {
     flex-direction: column;
     width: 100%;
     min-width: 0;
-    overflow: hidden;
+    /* overflow: visible so insert pills can hang outside segment bounds */
+    overflow: visible;
 }
 
 /* Top row: corner + column-ruler viewport */
@@ -576,7 +577,7 @@ tr.accordion-header.actives > td {
     background: var(--t-bg-workspace);
 }
 
-/* Corner cap (top-left intersection) */
+/* Corner cap (top-left intersection) — click toggles insert / duplicate mode */
 .tafne-corner {
     width: 28px;
     height: 22px;
@@ -585,6 +586,26 @@ tr.accordion-header.actives > td {
     border-right: 1px solid var(--t-border);
     border-bottom: 1px solid var(--t-border);
     box-sizing: border-box;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--t-text-muted);
+    user-select: none;
+}
+/* Show a tiny "+" label in insert mode so the corner communicates its action */
+.tafne-corner::after {
+    content: '+';
+}
+/* Duplicate-mode: corner turns accent blue, shows ⎘ */
+.tafne-ruler-wrap.ruler-dup-mode .tafne-corner {
+    background: var(--t-primary);
+    color: #fff;
+}
+.tafne-ruler-wrap.ruler-dup-mode .tafne-corner::after {
+    content: '⎘';
 }
 
 /* Viewport that clips the col ruler — scrollLeft sync'd by JS */
@@ -599,6 +620,7 @@ tr.accordion-header.actives > td {
     display: flex;
     flex-direction: row;
     background: var(--t-bg-surface);
+    overflow: visible; /* pills hang outside */
 }
 
 /* Middle row: row numbers + table viewport */
@@ -606,6 +628,7 @@ tr.accordion-header.actives > td {
     display: flex;
     flex-direction: row;
     align-items: flex-start;
+    overflow: visible;
 }
 
 /* Row numbers strip — outside the horizontal scroll viewport, always visible */
@@ -616,6 +639,11 @@ tr.accordion-header.actives > td {
     width: 28px;
     background: var(--t-bg-surface);
     border-right: 1px solid var(--t-border);
+    overflow: visible; /* pills hang below each segment */
+}
+
+.tafne-row-ruler .ruler-seg {
+    overflow: visible; /* pill hangs outside segment bounds */
 }
 
 /* Table's own horizontal scroll container */
@@ -624,11 +652,12 @@ tr.accordion-header.actives > td {
     flex: 1;
 }
 
-/* Shared segment styles */
+/* Shared segment styles — sizes set by JS via _syncRulerSegments */
 .tafne-col-ruler .ruler-seg {
     display: flex;
     align-items: center;
     justify-content: center;
+    /* height fixed to match corner/header strip height */
     height: 22px;
     border-right: 1px solid var(--t-border);
     box-sizing: border-box;
@@ -639,6 +668,7 @@ tr.accordion-header.actives > td {
     flex-shrink: 0;
     cursor: pointer;
     position: relative;
+    overflow: visible;
     transition: background 0.1s, color 0.1s;
 }
 
@@ -646,15 +676,18 @@ tr.accordion-header.actives > td {
     display: flex;
     align-items: center;
     justify-content: center;
+    /* width matches .tafne-corner / .tafne-row-ruler fixed width */
     width: 28px;
-    border-bottom: 1px solid var(--t-border);
     box-sizing: border-box;
+    border-bottom: 1px solid var(--t-border);
     font-size: 10px;
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
     color: var(--t-text-muted);
     user-select: none;
     cursor: pointer;
     position: relative;
+    overflow: visible;
+    flex-shrink: 0;
     transition: background 0.1s, color 0.1s;
 }
 
@@ -672,7 +705,7 @@ tr.accordion-header.actives > td {
     font-weight: 600;
 }
 
-/* Drag source — segment being reordered (double-click-drag) */
+/* Drag source — segment being reordered (click+drag) */
 .ruler-seg.ruler-drag-src {
     background: var(--t-primary);
     color: #fff;
@@ -705,3 +738,54 @@ tr.accordion-header.actives > td {
 }
 .tafne-col-ruler .ruler-seg.ruler-drop-before::before { left: -2px; }
 .tafne-col-ruler .ruler-seg.ruler-drop-after::after   { right: -2px; }
+
+/* ── Insert / duplicate pill ────────────────────────────────────────────── */
+
+/* Base pill — hidden until parent segment is hovered */
+.ruler-insert-pill {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    background: var(--t-primary);
+    color: #fff;
+    border-radius: 999px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s, transform 0.12s;
+    z-index: 5;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Show on parent hover */
+.ruler-seg:hover > .ruler-insert-pill {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Row ruler pill: sits at the bottom centre of the row segment */
+.tafne-row-ruler .ruler-seg .ruler-insert-pill {
+    width: 14px;
+    height: 14px;
+    bottom: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* Col ruler pill: sits at the right centre of the col segment */
+.tafne-col-ruler .ruler-seg .ruler-insert-pill {
+    width: 14px;
+    height: 14px;
+    right: -7px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* Duplicate mode: wrap gets .ruler-dup-mode; pills turn amber */
+.tafne-ruler-wrap.ruler-dup-mode .ruler-insert-pill {
+    background: var(--t-warning, #f59e0b);
+}

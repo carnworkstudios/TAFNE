@@ -1,6 +1,16 @@
 // ===================================================================================
 // 5. INPUT PARSING FUNCTIONS
 // ===================================================================================
+
+function _escHtml(str) {
+    return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function parseInput() {
     const inputType = $('#inputType').val();
     const inputData = (window.tifanyMonacoInput
@@ -146,8 +156,11 @@ function parseHtmlInput(html) {
         return normalized.join('\n');
     }
 
-    // If no table found, create a simple table
-    return `<table class="tablecoil crosshair-table"><tr id="test"><td>${html.replace(/\n/g, '</td></tr><tr id="test"><td>').replace(/\t/g, '</td><td>')}</td></tr></table>`;
+    // If no table found, treat input as plain text and build a single-column table
+    const escapedRows = html.split('\n')
+        .map(line => '<tr id="test">' + line.split('\t').map(cell => `<td>${_escHtml(cell)}</td>`).join('') + '</tr>')
+        .join('');
+    return `<table class="tablecoil crosshair-table">${escapedRows}</table>`;
 }
 
 function parseAsciiInput(ascii) {
@@ -166,7 +179,7 @@ function parseAsciiInput(ascii) {
             tableHtml += '<tr id="test">';
             cells.forEach(cell => {
                 const isHeader = index === 0 && line.toLowerCase().includes(cell.toLowerCase());
-                tableHtml += isHeader ? `<th>${cell.trim()}</th>` : `<td>${cell.trim()}</td>`;
+                tableHtml += isHeader ? `<th>${_escHtml(cell.trim())}</th>` : `<td>${_escHtml(cell.trim())}</td>`;
             });
             tableHtml += '</tr>';
         }
@@ -254,7 +267,7 @@ function parseCsvInput(csv) {
     records.forEach((cells, index) => {
         tableHtml += '<tr id="test">';
         cells.forEach(cell => {
-            tableHtml += index === 0 ? `<th>${cell}</th>` : `<td>${cell}</td>`;
+            tableHtml += index === 0 ? `<th>${_escHtml(cell)}</th>` : `<td>${_escHtml(cell)}</td>`;
         });
         tableHtml += '</tr>';
     });
@@ -275,7 +288,7 @@ function parseTextInput(text) {
             tableHtml += '<tr id="test">';
             cells.forEach(cell => {
                 const isHeader = index === 0;
-                tableHtml += isHeader ? `<th>${cell}</th>` : `<td>${cell}</td>`;
+                tableHtml += isHeader ? `<th>${_escHtml(cell)}</th>` : `<td>${_escHtml(cell)}</td>`;
             });
             tableHtml += '</tr>';
         }
@@ -309,7 +322,7 @@ function parseMarkdownInput(md) {
 
         tableHtml += '<tr id="test">';
         cells.forEach(cell => {
-            tableHtml += headerDone ? `<td>${cell}</td>` : `<th>${cell}</th>`;
+            tableHtml += headerDone ? `<td>${_escHtml(cell)}</td>` : `<th>${_escHtml(cell)}</th>`;
         });
         tableHtml += '</tr>';
         headerDone = true;
@@ -340,11 +353,11 @@ function parseJsonInput(json) {
 
     const headers = Object.keys(data[0]);
     let tableHtml = '<table class="tablecoil crosshair-table"><tr id="test">';
-    headers.forEach(h => { tableHtml += `<th>${h}</th>`; });
+    headers.forEach(h => { tableHtml += `<th>${_escHtml(h)}</th>`; });
     tableHtml += '</tr>';
     data.forEach(row => {
         tableHtml += '<tr id="test">';
-        headers.forEach(h => { tableHtml += `<td>${row[h] !== undefined ? row[h] : ''}</td>`; });
+        headers.forEach(h => { tableHtml += `<td>${_escHtml(row[h] !== undefined ? row[h] : '')}</td>`; });
         tableHtml += '</tr>';
     });
     tableHtml += '</table>';
@@ -374,11 +387,11 @@ function parseSqlInput(sql) {
     }
 
     let tableHtml = '<table class="tablecoil crosshair-table"><tr id="test">';
-    headers.forEach(h => { tableHtml += `<th>${h}</th>`; });
+    headers.forEach(h => { tableHtml += `<th>${_escHtml(h)}</th>`; });
     tableHtml += '</tr>';
     rows.forEach(row => {
         tableHtml += '<tr id="test">';
-        headers.forEach((_, i) => { tableHtml += `<td>${row[i] !== undefined ? row[i] : ''}</td>`; });
+        headers.forEach((_, i) => { tableHtml += `<td>${_escHtml(row[i] !== undefined ? row[i] : '')}</td>`; });
         tableHtml += '</tr>';
     });
     tableHtml += '</table>';

@@ -7,36 +7,46 @@
 
 window.tableRuler = (function () {
 
-    const DBL_CLICK_MS = 300; // max ms between clicks to count as double-click
+    const DRAG_THRESHOLD_PX = 4; // pixels of movement before a mousedown becomes a reorder drag
 
-    // ── Measure the rendered width of each visual column ─────────────────────
-    function _measureCols(mapper) {
-        const widths = new Array(mapper.maxCols).fill(null);
-        const seen   = new Array(mapper.maxCols).fill(false);
+    // Duplicate-mode flag: when true the insert pill duplicates the row/col instead of inserting blank
+    let _duplicateMode = false;
 
+    // ── Sync ruler segment sizes to live cell dimensions post-layout ─────────
+    // Called after the wrap is in the DOM so getBoundingClientRect is accurate.
+    // Row segments: height matches each <tr> height.
+    // Col segments: width matches each visual column width (first non-spanning cell wins).
+    function _syncRulerSegments(wrap, table) {
+        const mapper   = new window.VisualGridMapper(table);
+        const $rowSegs = $(wrap).find('.tafne-row-ruler .ruler-seg');
+        const $colSegs = $(wrap).find('.tafne-col-ruler .ruler-seg');
+
+        // Row heights — read from live <tr> rects
+        const rows = Array.from(table.rows).filter(r => !r.classList.contains('tifany-drag-row') && !r.classList.contains('drop-indicator-row'));
+        $rowSegs.each(function (i) {
+            const row = rows[i];
+            if (!row) return;
+            const h = row.getBoundingClientRect().height;
+            if (h > 0) $(this).css({ 'min-height': h + 'px', 'max-height': h + 'px', height: h + 'px' });
+        });
+
+        // Col widths — for each visual col, find the first non-spanning origin cell and read its width
+        const seen = new Array(mapper.maxCols).fill(false);
         mapper.cellMap.forEach((info, cell) => {
             if (info.colspan === 1 && !seen[info.startCol]) {
                 const w = cell.getBoundingClientRect().width;
                 if (w > 0) {
-                    widths[info.startCol] = Math.round(w);
-                    seen[info.startCol]   = true;
+                    seen[info.startCol] = true;
+                    const $seg = $colSegs.filter(`[data-col="${info.startCol}"]`);
+                    $seg.css({ 'min-width': w + 'px', 'max-width': w + 'px', width: w + 'px' });
                 }
             }
         });
-
-        const nonNull = widths.filter(w => w !== null);
-        const avg     = nonNull.length > 0
-            ? Math.round(nonNull.reduce((s, w) => s + w, 0) / nonNull.length)
-            : 80;
-
-        return widths.map(w => w !== null ? w : avg);
-    }
-
-    // ── Measure the rendered height of each table row ─────────────────────────
-    function _measureRows(table) {
-        return Array.from(table.rows).map(r => {
-            const h = r.getBoundingClientRect().height;
-            return h > 0 ? Math.round(h) : 24;
+        // Fallback for any unseen cols (all cells spanning): use average of seen
+        const seenWidths = $colSegs.toArray().map((s, i) => seen[i] ? parseFloat($(s).css('min-width')) || 0 : 0).filter(w => w > 0);
+        const avg = seenWidths.length ? Math.round(seenWidths.reduce((a, b) => a + b, 0) / seenWidths.length) : 80;
+        $colSegs.each(function (i) {
+            if (!seen[i]) $(this).css({ 'min-width': avg + 'px', 'max-width': avg + 'px', width: avg + 'px' });
         });
     }
 
@@ -58,96 +68,42 @@ window.tableRuler = (function () {
         });
     }
 
-    // ── Range-select multiple rows (click-drag on row ruler) ──────────────────
-    function _startRulerRowSelect($wrap, table, anchorIdx, e) {
-        const $segs  = $wrap.find('.tafne-row-ruler .ruler-seg');
+    // ── Click-to-select with optional shift-extend ───────────────────────────
+    // anchorRow/Col is stored on the wrap so shift-click can extend from it.
+    function _handleRulerRowClick($wrap, table, rowIdx, e) {
         const mapper = new window.VisualGridMapper(table);
-
-        function _selectRange(from, to) {
-            const min = Math.min(from, to);
-            const max = Math.max(from, to);
+        if (e.shiftKey && $wrap[0]._rulerRowAnchor != null) {
+            const from = $wrap[0]._rulerRowAnchor;
+            const min  = Math.min(from, rowIdx);
+            const max  = Math.max(from, rowIdx);
             const cells = [];
             for (let r = min; r <= max; r++) {
-                mapper.getCellsInRow(r).forEach(c => {
-                    if (!$(c).hasClass('drag-handle')) cells.push(c);
-                });
+                mapper.getCellsInRow(r).forEach(c => { if (!$(c).hasClass('drag-handle')) cells.push(c); });
             }
-            $(table).find('.selected-cell').removeClass('selected-cell');
-            cells.forEach(c => $(c).addClass('selected-cell'));
-            window.selectedCells       = cells;
-            window.selectionAnchorCell = cells[0]                    || null;
-            window.selectionHeadCell   = cells[cells.length - 1]     || null;
-            window.currentTable        = table;
-            const $dd = $('#elementType');
-            if ($dd.length) $dd.val('row');
-            if (typeof window.highlightRuler === 'function') {
-                window.highlightRuler(table, window.selectedCells);
-            }
+            _applyRulerSelection(table, cells, 'row');
+        } else {
+            $wrap[0]._rulerRowAnchor = rowIdx;
+            const cells = mapper.getCellsInRow(rowIdx).filter(c => !$(c).hasClass('drag-handle'));
+            _applyRulerSelection(table, cells, 'row');
         }
-
-        function _idxAtY(y) {
-            let idx = anchorIdx;
-            $segs.each(function (i) {
-                const rect = this.getBoundingClientRect();
-                if (y >= rect.top && y <= rect.bottom) { idx = i; return false; }
-            });
-            return idx;
-        }
-
-        _selectRange(anchorIdx, anchorIdx);
-
-        $(document).on('mousemove.rulerrowsel', function (mv) {
-            _selectRange(anchorIdx, _idxAtY(mv.clientY));
-        });
-        $(document).one('mouseup.rulerrowsel', function () {
-            $(document).off('mousemove.rulerrowsel');
-        });
     }
 
-    // ── Range-select multiple columns (click-drag on col ruler) ───────────────
-    function _startRulerColSelect($wrap, table, anchorIdx, e) {
-        const $segs  = $wrap.find('.tafne-col-ruler .ruler-seg');
+    function _handleRulerColClick($wrap, table, colIdx, e) {
         const mapper = new window.VisualGridMapper(table);
-
-        function _selectRange(from, to) {
-            const min = Math.min(from, to);
-            const max = Math.max(from, to);
+        if (e.shiftKey && $wrap[0]._rulerColAnchor != null) {
+            const from = $wrap[0]._rulerColAnchor;
+            const min  = Math.min(from, colIdx);
+            const max  = Math.max(from, colIdx);
             const cells = [];
             for (let c = min; c <= max; c++) {
-                mapper.getCellsInColumn(c).forEach(cell => {
-                    if (!$(cell).hasClass('drag-handle')) cells.push(cell);
-                });
+                mapper.getCellsInColumn(c).forEach(cell => { if (!$(cell).hasClass('drag-handle')) cells.push(cell); });
             }
-            $(table).find('.selected-cell').removeClass('selected-cell');
-            cells.forEach(c => $(c).addClass('selected-cell'));
-            window.selectedCells       = cells;
-            window.selectionAnchorCell = cells[0]                    || null;
-            window.selectionHeadCell   = cells[cells.length - 1]     || null;
-            window.currentTable        = table;
-            const $dd = $('#elementType');
-            if ($dd.length) $dd.val('column');
-            if (typeof window.highlightRuler === 'function') {
-                window.highlightRuler(table, window.selectedCells);
-            }
+            _applyRulerSelection(table, cells, 'column');
+        } else {
+            $wrap[0]._rulerColAnchor = colIdx;
+            const cells = mapper.getCellsInColumn(colIdx).filter(c => !$(c).hasClass('drag-handle'));
+            _applyRulerSelection(table, cells, 'column');
         }
-
-        function _idxAtX(x) {
-            let idx = anchorIdx;
-            $segs.each(function (i) {
-                const rect = this.getBoundingClientRect();
-                if (x >= rect.left && x <= rect.right) { idx = i; return false; }
-            });
-            return idx;
-        }
-
-        _selectRange(anchorIdx, anchorIdx);
-
-        $(document).on('mousemove.rulercolsel', function (mv) {
-            _selectRange(anchorIdx, _idxAtX(mv.clientX));
-        });
-        $(document).one('mouseup.rulercolsel', function () {
-            $(document).off('mousemove.rulercolsel');
-        });
     }
 
     // ── Move row by visual index (insertBefore = target position 0..N) ────────
@@ -208,7 +164,6 @@ window.tableRuler = (function () {
             }
         }
 
-        if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
         requestAnimationFrame(() => renderTableRulers(table));
     }
 
@@ -281,6 +236,37 @@ window.tableRuler = (function () {
         });
     }
 
+    // ── Pill label for current mode ───────────────────────────────────────────
+    function _pillLabel() { return _duplicateMode ? '⎘' : '+'; }
+    function _pillRowTitle() { return _duplicateMode ? 'Duplicate row below' : 'Insert row after'; }
+    function _pillColTitle() { return _duplicateMode ? 'Duplicate column after' : 'Insert column after'; }
+    function _cornerTitle()  { return _duplicateMode ? 'Mode: Duplicate — click to switch to Insert' : 'Mode: Insert — click to switch to Duplicate'; }
+
+    // Update every pill label + corner tooltip across all ruler wraps
+    function _syncModeUI() {
+        const label = _pillLabel();
+        $('.tafne-row-ruler .ruler-insert-pill').text(label).attr('title', _pillRowTitle());
+        $('.tafne-col-ruler .ruler-insert-pill').text(label).attr('title', _pillColTitle());
+        $('.tafne-corner').attr('title', _cornerTitle());
+        $('.tafne-ruler-wrap').toggleClass('ruler-dup-mode', _duplicateMode);
+    }
+
+    // ── Show the cell context menu at a given viewport position ──────────────
+    function _showContextMenuAt(x, y) {
+        const $menu = $('#cellContextMenu');
+        if (!$menu.length) return;
+        $menu.show();
+        const menuW = $menu.outerWidth();
+        const menuH = $menu.outerHeight();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const pad = 8;
+        if (x + menuW + pad > vw) x = Math.max(pad, x - menuW);
+        if (y + menuH + pad > vh) y = Math.max(pad, vh - menuH - pad);
+        if (y < pad) y = pad;
+        $menu.css({ top: y + 'px', left: x + 'px', display: 'grid', position: 'fixed' });
+    }
+
     // ── Build and inject ruler strips around a table ──────────────────────────
     function renderTableRulers(table) {
         const $table = $(table);
@@ -299,20 +285,28 @@ window.tableRuler = (function () {
             $existing.remove();
         }
 
+        // Disconnect previous MutationObserver (row/col add/delete watcher)
+        if (table._tafneStructObs) {
+            table._tafneStructObs.disconnect();
+            delete table._tafneStructObs;
+        }
+
         const mapper = new VisualGridMapper(table);
         if (mapper.maxCols === 0 || mapper.maxRows === 0) return;
 
-        const colWidths  = _measureCols(mapper);
-        const rowHeights = _measureRows(table);
+        const nCols = mapper.maxCols;
+        const rows  = Array.from(table.rows).filter(r => !r.classList.contains('tifany-drag-row') && !r.classList.contains('drop-indicator-row'));
+        const nRows = rows.length;
 
-        // Column ruler segments
-        const colSegs = colWidths.map((w, i) =>
-            `<div class="ruler-seg" data-col="${i}" style="min-width:${w}px;max-width:${w}px" title="Col ${i + 1}">${i + 1}</div>`
+        const pillLabel = _pillLabel();
+
+        // Build segments without fixed sizes — _syncRulerSegments sets them after DOM insertion
+        const colSegs = Array.from({ length: nCols }, (_, i) =>
+            `<div class="ruler-seg" data-col="${i}" title="Col ${i + 1}">${i + 1}<span class="ruler-insert-pill" data-col="${i}" title="${_pillColTitle()}">${pillLabel}</span></div>`
         ).join('');
 
-        // Row ruler segments
-        const rowSegs = rowHeights.map((h, i) =>
-            `<div class="ruler-seg" data-row="${i}" style="min-height:${h}px;max-height:${h}px" title="Row ${i + 1}">${i + 1}</div>`
+        const rowSegs = Array.from({ length: nRows }, (_, i) =>
+            `<div class="ruler-seg" data-row="${i}" title="Row ${i + 1}">${i + 1}<span class="ruler-insert-pill" data-row="${i}" title="${_pillRowTitle()}">${pillLabel}</span></div>`
         ).join('');
 
         // Assemble wrapper:
@@ -321,7 +315,7 @@ window.tableRuler = (function () {
         const $wrap = $(`
             <div class="tafne-ruler-wrap">
                 <div class="tafne-ruler-header">
-                    <div class="tafne-corner"></div>
+                    <div class="tafne-corner" title="${_cornerTitle()}"></div>
                     <div class="tafne-col-ruler-vp">
                         <div class="tafne-col-ruler">${colSegs}</div>
                     </div>
@@ -337,12 +331,102 @@ window.tableRuler = (function () {
         $table.before($wrap);
         $wrap.find('.tafne-table-vp').append($table);
 
+        // Sync segment sizes after the browser has laid out the new DOM
+        requestAnimationFrame(() => _syncRulerSegments($wrap[0], table));
+
         // Sync horizontal scroll: table-vp → col-ruler-vp
         const tableVp    = $wrap.find('.tafne-table-vp')[0];
         const colRulerVp = $wrap.find('.tafne-col-ruler-vp')[0];
         tableVp.addEventListener('scroll', function () {
             colRulerVp.scrollLeft = this.scrollLeft;
         }, { passive: true });
+
+        // Apply current dup-mode state
+        $wrap.toggleClass('ruler-dup-mode', _duplicateMode);
+
+        // ── Corner: left-click toggles insert/duplicate mode ─────────────────
+        const $corner = $wrap.find('.tafne-corner');
+        $corner.on('click.ruler', function (e) {
+            e.stopPropagation();
+            _duplicateMode = !_duplicateMode;
+            _syncModeUI();
+        });
+
+        // ── Stop pill mousedown from bubbling into the seg drag/select handler ──
+        $wrap.on('mousedown.ruler', '.ruler-insert-pill', function (e) {
+            e.stopPropagation();
+        });
+
+        // ── Row pill: insert or duplicate row after index ─────────────────────
+        $wrap.find('.tafne-row-ruler').on('click.ruler', '.ruler-insert-pill', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            const idx = parseInt($(this).attr('data-row'), 10);
+            const $rows = $(table).find('tr').not('.tifany-drag-row').not('.drop-indicator-row');
+            const $target = $rows.eq(idx);
+            if (!$target.length) return;
+            if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+            if (_duplicateMode) {
+                $target.after($target.clone(false));
+            } else {
+                const colCount = new window.VisualGridMapper(table).maxCols;
+                let newRow = '<tr>';
+                for (let i = 0; i < colCount; i++) newRow += '<td></td>';
+                newRow += '</tr>';
+                $target.after(newRow);
+            }
+            if (typeof window.setupTableInteraction === 'function') window.setupTableInteraction();
+        });
+
+        // ── Col pill: insert or duplicate column after index ──────────────────
+        $wrap.find('.tafne-col-ruler').on('click.ruler', '.ruler-insert-pill', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            const colIdx = parseInt($(this).attr('data-col'), 10);
+            const mapper = new window.VisualGridMapper(table);
+            if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+            if (_duplicateMode) {
+                for (let r = 0; r < mapper.maxRows; r++) {
+                    const rowGrid = mapper.grid[r];
+                    if (!rowGrid) continue;
+                    const gc = rowGrid[colIdx];
+                    if (!gc || !gc.isOrigin) continue;
+                    $(gc.element).after($(gc.element).clone(false));
+                }
+            } else {
+                for (let r = 0; r < mapper.maxRows; r++) {
+                    const rowGrid = mapper.grid[r];
+                    if (!rowGrid) continue;
+                    const gc = rowGrid[colIdx];
+                    if (!gc || !gc.isOrigin) continue;
+                    const tag = gc.element.tagName.toLowerCase();
+                    $(gc.element).after(`<${tag}></${tag}>`);
+                }
+            }
+            if (typeof window.setupTableInteraction === 'function') window.setupTableInteraction();
+        });
+
+        // ── Row ruler: right-click → select row + open cell context menu ─────
+        $wrap.find('.tafne-row-ruler').on('contextmenu.ruler', '.ruler-seg', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const rowIdx = parseInt($(this).attr('data-row'), 10);
+            _handleRulerRowClick($wrap, table, rowIdx, { shiftKey: false });
+            window.cellBeingEdited = table.rows[rowIdx] ? table.rows[rowIdx].cells[0] : null;
+            _showContextMenuAt(e.clientX, e.clientY);
+        });
+
+        // ── Col ruler: right-click → select column + open cell context menu ──
+        $wrap.find('.tafne-col-ruler-vp').on('contextmenu.ruler', '.ruler-seg', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const colIdx = parseInt($(this).attr('data-col'), 10);
+            _handleRulerColClick($wrap, table, colIdx, { shiftKey: false });
+            const m2 = new window.VisualGridMapper(table);
+            const firstCell = m2.getCellsInColumn(colIdx)[0] || null;
+            window.cellBeingEdited = firstCell;
+            _showContextMenuAt(e.clientX, e.clientY);
+        });
 
         // Ruler highlight on cell click
         $table.off('click.ruler mousedown.ruler').on('click.ruler mousedown.ruler', 'td, th', function () {
@@ -353,49 +437,60 @@ window.tableRuler = (function () {
             });
         });
 
-        // ── Row ruler: click-drag = range select; dbl-click-drag = reorder ──────
-        // Mirrors iOS Numbers: one tap/drag selects, double-tap-drag reorders.
-        let _rowLastClickTime = 0;
-        let _rowLastClickIdx  = -1;
-
+        // ── Row ruler: mousedown → watch for movement threshold ──────────────────
+        // If mouse moves > DRAG_THRESHOLD_PX before mouseup  → reorder drag
+        // If mouseup without threshold crossed               → select (shift extends)
         $wrap.find('.tafne-row-ruler').on('mousedown', '.ruler-seg', function (e) {
             if (e.button !== 0) return;
-            const rowIdx = parseInt($(this).attr('data-row'), 10);
-            const now    = Date.now();
-            const isDbl  = (now - _rowLastClickTime < DBL_CLICK_MS) && (_rowLastClickIdx === rowIdx);
-            _rowLastClickTime = now;
-            _rowLastClickIdx  = rowIdx;
-
-            if (isDbl) {
-                _startRulerRowDrag($wrap, table, rowIdx, e);
-            } else {
-                _startRulerRowSelect($wrap, table, rowIdx, e);
-            }
-
             e.preventDefault();
             e.stopPropagation();
+
+            const rowIdx  = parseInt($(this).attr('data-row'), 10);
+            const startY  = e.clientY;
+            let   dragging = false;
+
+            function onMove(mv) {
+                if (!dragging && Math.abs(mv.clientY - startY) > DRAG_THRESHOLD_PX) {
+                    dragging = true;
+                    $(document).off('mousemove.rulerrowintent mouseup.rulerrowintent');
+                    _startRulerRowDrag($wrap, table, rowIdx, mv);
+                }
+            }
+            function onUp() {
+                $(document).off('mousemove.rulerrowintent mouseup.rulerrowintent');
+                if (!dragging) {
+                    _handleRulerRowClick($wrap, table, rowIdx, e);
+                }
+            }
+            $(document).on('mousemove.rulerrowintent', onMove)
+                       .one('mouseup.rulerrowintent', onUp);
         });
 
-        // ── Col ruler: click-drag = range select; dbl-click-drag = reorder ──────
-        let _colLastClickTime = 0;
-        let _colLastClickIdx  = -1;
-
+        // ── Col ruler: same threshold pattern ────────────────────────────────────
         $wrap.find('.tafne-col-ruler-vp').on('mousedown', '.ruler-seg', function (e) {
             if (e.button !== 0) return;
-            const colIdx = parseInt($(this).attr('data-col'), 10);
-            const now    = Date.now();
-            const isDbl  = (now - _colLastClickTime < DBL_CLICK_MS) && (_colLastClickIdx === colIdx);
-            _colLastClickTime = now;
-            _colLastClickIdx  = colIdx;
-
-            if (isDbl) {
-                _startRulerColDrag($wrap, table, colIdx, e);
-            } else {
-                _startRulerColSelect($wrap, table, colIdx, e);
-            }
-
             e.preventDefault();
             e.stopPropagation();
+
+            const colIdx  = parseInt($(this).attr('data-col'), 10);
+            const startX  = e.clientX;
+            let   dragging = false;
+
+            function onMove(mv) {
+                if (!dragging && Math.abs(mv.clientX - startX) > DRAG_THRESHOLD_PX) {
+                    dragging = true;
+                    $(document).off('mousemove.rulercolintent mouseup.rulercolintent');
+                    _startRulerColDrag($wrap, table, colIdx, mv);
+                }
+            }
+            function onUp() {
+                $(document).off('mousemove.rulercolintent mouseup.rulercolintent');
+                if (!dragging) {
+                    _handleRulerColClick($wrap, table, colIdx, e);
+                }
+            }
+            $(document).on('mousemove.rulercolintent', onMove)
+                       .one('mouseup.rulercolintent', onUp);
         });
 
         // ── ResizeObserver + window resize: rebuild ruler if table changes size ─
@@ -410,11 +505,20 @@ window.tableRuler = (function () {
             if (table._tafneRulerRebuilding) return;
             clearTimeout(table._tafneRulerTimer);
             table._tafneRulerTimer = setTimeout(() => {
-                if (!$(table).closest('.tafne-ruler-wrap').length) return;
-                table._tafneRulerRebuilding = true;
-                renderTableRulers(table);
-                table._tafneRulerRebuilding = false;
-            }, 120);
+                const $w = $(table).closest('.tafne-ruler-wrap');
+                if (!$w.length) return;
+                const mapper2 = new window.VisualGridMapper(table);
+                const liveRows = Array.from(table.rows).filter(r => !r.classList.contains('tifany-drag-row') && !r.classList.contains('drop-indicator-row')).length;
+                const segRows  = $w.find('.tafne-row-ruler .ruler-seg').length;
+                const segCols  = $w.find('.tafne-col-ruler .ruler-seg').length;
+                if (liveRows === segRows && mapper2.maxCols === segCols) {
+                    _syncRulerSegments($w[0], table);
+                } else {
+                    table._tafneRulerRebuilding = true;
+                    renderTableRulers(table);
+                    table._tafneRulerRebuilding = false;
+                }
+            }, 60);
         }
 
         if (window.ResizeObserver) {
@@ -426,6 +530,22 @@ window.tableRuler = (function () {
         // Fallback: window resize covers container reflows the ResizeObserver may miss
         table._tafneResizeHandler = _scheduleRulerRebuild;
         window.addEventListener('resize', table._tafneResizeHandler, { passive: true });
+
+        // ── MutationObserver: immediately rebuild on row/cell add or remove ───
+        // ResizeObserver only fires after a layout pass; direct DOM mutations
+        // (deleteRows, deleteColumns, undo) can remove rows without a resize if
+        // the table width stays the same — leaving ghost segments in the ruler.
+        if (window.MutationObserver) {
+            const mo = new MutationObserver(mutations => {
+                const structural = mutations.some(m =>
+                    m.type === 'childList' &&
+                    (m.addedNodes.length > 0 || m.removedNodes.length > 0)
+                );
+                if (structural) _scheduleRulerRebuild();
+            });
+            mo.observe(table, { childList: true, subtree: true });
+            table._tafneStructObs = mo;
+        }
     }
 
     // ── Highlight ruler segments matching the current selection ───────────────
@@ -456,6 +576,10 @@ window.tableRuler = (function () {
         if (table._tafneRulerObs) {
             table._tafneRulerObs.disconnect();
             delete table._tafneRulerObs;
+        }
+        if (table._tafneStructObs) {
+            table._tafneStructObs.disconnect();
+            delete table._tafneStructObs;
         }
         if (table._tafneResizeHandler) {
             window.removeEventListener('resize', table._tafneResizeHandler);
