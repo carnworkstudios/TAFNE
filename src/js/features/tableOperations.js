@@ -211,11 +211,18 @@ function deleteRows() {
         return;
     }
 
+    const table = window.currentTable;
+
     // Get unique rows from selected cells
     const rows = new Set();
     window.selectedCells.forEach(cell => {
         rows.add($(cell).parent()[0]);
     });
+
+    if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+
+    // Disconnect ruler observer before mutating so it doesn't race with renderTableRulers
+    if (table && table._tafneStructObs) table._tafneStructObs.disconnect();
 
     // Remove each row
     rows.forEach(row => {
@@ -225,7 +232,6 @@ function deleteRows() {
     // Clear selection
     window.selectedCells = [];
 
-    window.saveCurrentState();
     $.toast({
         heading: 'Success',
         text: 'Row(s) deleted',
@@ -234,14 +240,20 @@ function deleteRows() {
         stack: false
     });
 
-    // Reinitialize features
+    // Rebuild ruler immediately, then re-init interaction
+    console.log('[deleteRows] table=', table, 'rows after delete=', table ? table.rows.length : 'N/A', 'renderTableRulers=', typeof window.renderTableRulers, '_tafneRulerRebuilding=', table && table._tafneRulerRebuilding);
+    if (table && typeof window.renderTableRulers === 'function') {
+        window.renderTableRulers(table);
+    }
+    console.log('[deleteRows] after renderTableRulers, rowSegs=', table ? $(table).closest('.tafne-ruler-wrap').find('.tafne-row-ruler .ruler-seg').length : 'N/A');
     window.setupTableInteraction();
 }
 
 function deleteColumns() {
     if (!window.currentTable) return;
 
-    const $table = $(window.currentTable);
+    const table = window.currentTable;
+    const $table = $(table);
     const mapper = new VisualGridMapper($table);
 
     // Get unique visual columns from selected cells
@@ -256,6 +268,11 @@ function deleteColumns() {
     // Sort descending so removing right-to-left doesn't shift indices
     const colsArray = Array.from(columns).sort((a, b) => b - a);
 
+    if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+
+    // Disconnect ruler observer before mutating so it doesn't race with renderTableRulers
+    if (table._tafneStructObs) table._tafneStructObs.disconnect();
+
     // Use getCellsInColumn to get the real DOM elements — safe with colspan/rowspan
     colsArray.forEach(colIndex => {
         const cellsToRemove = mapper.getCellsInColumn(colIndex);
@@ -265,7 +282,6 @@ function deleteColumns() {
     // Clear selection
     window.selectedCells = [];
 
-    window.saveCurrentState();
     $.toast({
         heading: 'Success',
         text: 'Column(s) deleted',
@@ -274,7 +290,10 @@ function deleteColumns() {
         stack: false
     });
 
-    // Reinitialize features
+    // Rebuild ruler immediately, then re-init interaction
+    if (typeof window.renderTableRulers === 'function') {
+        window.renderTableRulers(table);
+    }
     window.setupTableInteraction();
 }
 

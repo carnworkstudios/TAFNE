@@ -113,6 +113,7 @@ window.tableRuler = (function () {
         const $from = $rows.eq(fromIdx);
         if (!$from.length) return;
         if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+        if (table._tafneStructObs) table._tafneStructObs.disconnect();
         if (insertBefore <= 0) {
             $rows.first().before($from);
         } else if (insertBefore >= $rows.length) {
@@ -128,9 +129,9 @@ window.tableRuler = (function () {
         if (fromIdx === insertBefore || fromIdx + 1 === insertBefore) return;
         const mapper  = new window.VisualGridMapper(table);
         const moved   = new Set();
-        // toIdx: the mapper column before which the dragged column should land
         const toIdx   = insertBefore > fromIdx ? insertBefore - 1 : insertBefore;
         if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+        if (table._tafneStructObs) table._tafneStructObs.disconnect();
 
         for (let r = 0; r < mapper.maxRows; r++) {
             const row = mapper.grid[r];
@@ -366,6 +367,8 @@ window.tableRuler = (function () {
             const $target = $rows.eq(idx);
             if (!$target.length) return;
             if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+            // Pause the MutationObserver so the insertion doesn't race with renderTableRulers
+            if (table._tafneStructObs) table._tafneStructObs.disconnect();
             if (_duplicateMode) {
                 $target.after($target.clone(false));
             } else {
@@ -375,7 +378,7 @@ window.tableRuler = (function () {
                 newRow += '</tr>';
                 $target.after(newRow);
             }
-            if (typeof window.setupTableInteraction === 'function') window.setupTableInteraction();
+            renderTableRulers(table);
         });
 
         // ── Col pill: insert or duplicate column after index ──────────────────
@@ -385,6 +388,8 @@ window.tableRuler = (function () {
             const colIdx = parseInt($(this).attr('data-col'), 10);
             const mapper = new window.VisualGridMapper(table);
             if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+            // Pause the MutationObserver so the insertion doesn't race with renderTableRulers
+            if (table._tafneStructObs) table._tafneStructObs.disconnect();
             if (_duplicateMode) {
                 for (let r = 0; r < mapper.maxRows; r++) {
                     const rowGrid = mapper.grid[r];
@@ -403,7 +408,7 @@ window.tableRuler = (function () {
                     $(gc.element).after(`<${tag}></${tag}>`);
                 }
             }
-            if (typeof window.setupTableInteraction === 'function') window.setupTableInteraction();
+            renderTableRulers(table);
         });
 
         // ── Row ruler: right-click → select row + open cell context menu ─────
@@ -537,11 +542,29 @@ window.tableRuler = (function () {
         // the table width stays the same — leaving ghost segments in the ruler.
         if (window.MutationObserver) {
             const mo = new MutationObserver(mutations => {
+                if (table._tafneRulerRebuilding) return;
                 const structural = mutations.some(m =>
                     m.type === 'childList' &&
                     (m.addedNodes.length > 0 || m.removedNodes.length > 0)
                 );
-                if (structural) _scheduleRulerRebuild();
+                if (!structural) return;
+
+                // Count mismatch → rebuild ruler immediately (no debounce)
+                const $w = $(table).closest('.tafne-ruler-wrap');
+                if (!$w.length) return;
+                const liveRows = Array.from(table.rows).filter(r =>
+                    !r.classList.contains('tifany-drag-row') &&
+                    !r.classList.contains('drop-indicator-row')
+                ).length;
+                const mapper3 = new window.VisualGridMapper(table);
+                const segRows = $w.find('.tafne-row-ruler .ruler-seg').length;
+                const segCols = $w.find('.tafne-col-ruler .ruler-seg').length;
+                if (liveRows !== segRows || mapper3.maxCols !== segCols) {
+                    mo.disconnect();
+                    table._tafneRulerRebuilding = true;
+                    renderTableRulers(table);
+                    table._tafneRulerRebuilding = false;
+                }
             });
             mo.observe(table, { childList: true, subtree: true });
             table._tafneStructObs = mo;

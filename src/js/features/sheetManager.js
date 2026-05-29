@@ -238,6 +238,8 @@ function deleteSheet(id) {
     const wasActive = (id === window.activeSheetId);
     window.sheets.splice(idx, 1);
 
+    if (typeof window.clearSheetHistory === 'function') window.clearSheetHistory(id);
+
     if (wasActive) {
         // Switch to adjacent sheet
         const nextSheet = window.sheets[Math.min(idx, window.sheets.length - 1)];
@@ -285,6 +287,7 @@ function _activateSheet(id) {
     }
 
     renderSheetTabs();
+    if (typeof window.syncHistoryButtons === 'function') window.syncHistoryButtons();
 }
 
 /**

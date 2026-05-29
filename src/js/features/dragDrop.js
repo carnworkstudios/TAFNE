@@ -4,6 +4,14 @@
     let draggedElement = null;
     let dragType = null; // 'cell', 'row', or 'column'
 
+    // Programmatically activate drag-drop and sync the toggle pill/switch UI
+    function _activateDragDrop() {
+        if (window.dragDropEnabled) return;
+        window.dragDropEnabled = true;
+        $('#dragDropSwitch').prop('checked', true);
+        $('#toggleDragDrop').text('Enabled').css({ 'background-color': 'lightgreen', 'color': 'white' });
+    }
+
     function enableDragDrop() {
         if (!currentTable) return;
         const $table = $(currentTable);
@@ -16,10 +24,9 @@
         });
 
         // --- Enable ROW dragging ---
-        $table.find('tr').each(function () {
-            // Add a handle to the start of the row for dragging
-            $(this).prepend('<td class="drag-handle row-handle">::</td>');
-        });
+        // $table.find('tr').each(function () {
+        //     $(this).prepend('<td class="drag-handle row-handle">::</td>');
+        // });
         $table.on('mousedown.drag', '.row-handle', function (e) {
             startRowDrag($(this).parent('tr')[0], e);
         });
@@ -31,10 +38,10 @@
         // Inject dedicated drag handle row at the top
         // Start with an empty spacer to align with the row-handle column
         let dragRowHtml = '<tr class="tifany-drag-row ignore-export" style="background:var(--t-bg-workspace); border-bottom:2px solid var(--t-primary);">';
-        dragRowHtml += '<td class="drag-handle drag-row-spacer" style="width:20px; padding:0;"></td>';
-        for (let i = 0; i < maxCols; i++) {
-            dragRowHtml += `<td class="drag-handle col-handle" data-col-index="${i}" style="text-align:center; font-weight:bold; color:var(--t-primary); cursor:ew-resize; padding:4px;">::</td>`;
-        }
+        // dragRowHtml += '<td class="drag-handle drag-row-spacer" style="width:20px; padding:0;"></td>';
+        // for (let i = 0; i < maxCols; i++) {
+        //     dragRowHtml += `<td class="drag-handle col-handle" data-col-index="${i}" style="text-align:center; font-weight:bold; color:var(--t-primary); cursor:ew-resize; padding:4px;">::</td>`;
+        // }
         dragRowHtml += '</tr>';
         
         if ($table.find('thead').length) {
@@ -50,11 +57,46 @@
             startColumnDrag(colIndex, e);
         });
 
-        // --- Enable CELL dragging ---
-        $table.on('mousedown.drag', 'td:not(.drag-handle), th:not(.drag-handle)', function (e) {
-            startCellDrag(this, e);
+    }
+
+    // Always-on cell drag — registered by setupTableInteraction, independent of the toggle.
+    // dblclick+drag activates the toggle automatically; dblclick without drag falls through to edit.
+    function setupCellDrag(table) {
+        const $table = $(table);
+        let _dblPending = false;
+
+        $table.off('dblclick.celldrag mousedown.celldrag');
+
+        $table.on('dblclick.celldrag', 'td:not(.drag-handle), th:not(.drag-handle)', function (e) {
+            if (_dblPending) e.stopImmediatePropagation();
+        });
+
+        $table.on('mousedown.celldrag', 'td:not(.drag-handle), th:not(.drag-handle)', function (e) {
+            if (e.button !== 0) return;
+            if (e.originalEvent.detail < 2) return;
+            e.preventDefault();
+            _dblPending = false;
+            const cell = this;
+            const startX = e.clientX;
+            const startY = e.clientY;
+
+            function onMove(mv) {
+                if (Math.abs(mv.clientX - startX) > 4 || Math.abs(mv.clientY - startY) > 4) {
+                    _dblPending = true;
+                    $(document).off('mousemove.celldragintent mouseup.celldragintent');
+                    _activateDragDrop();
+                    startCellDrag(cell, mv);
+                }
+            }
+            function onUp() {
+                $(document).off('mousemove.celldragintent mouseup.celldragintent');
+                _dblPending = false;
+            }
+            $(document).on('mousemove.celldragintent', onMove)
+                       .one('mouseup.celldragintent', onUp);
         });
     }
+    window.setupCellDrag = setupCellDrag;
 
     function disableDragDrop() {
         if (!currentTable) return;

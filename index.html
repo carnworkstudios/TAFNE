@@ -256,6 +256,9 @@
       referrerpolicy="no-referrer"
     ></script>
 
+    <!-- DOMPurify must load BEFORE Monaco's AMD loader — DOMPurify detects define()
+         and registers as an anonymous AMD module, which Monaco's loader rejects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <!-- Monaco Editor CDN (must be after Bootstrap to prevent AMD loader conflict) -->
     <script
       src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"
@@ -263,8 +266,6 @@
     ></script>
     <!-- GSAP (pinned 3.12.2 — same version as schema-editor; used by Node Editor renderer) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-    <!-- DOMPurify -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 
     <!-- TAFNE Core -->
     <script src="src/js/core/tifany.js"></script>
@@ -411,7 +412,7 @@
           id="toggleLeftPanel"
           title="Hide Tools Panel"
           aria-label="Toggle tools panel"
-          style="font-size: 16px"
+          style="font-size: 16px; background: lightgray; border: 2px solid lightgray; border-radius: 3px;"
         >
           <!-- class="theme-toggle-btn active" -->
           ☰
@@ -423,7 +424,7 @@
           title="Toggle dark mode"
           aria-label="Toggle dark mode"
         >
-          <span class="theme-icon">☀</span>
+          <i class="fa-solid fa-sun theme-icon-sun"></i><i class="fa-solid fa-moon theme-icon-moon"></i>
         </button>
         <!-- Load file -->
         <input
@@ -526,13 +527,13 @@
               class="undoHistory btn btn-sm btn-outline-secondary toolbar-btn"
               title="Undo last action (Ctrl+Z)"
             >
-              &#9100; Undo <span class="undoState"></span>
+              &#9100; Undo · <span class="undoState"></span>
             </button>
             <button
               class="redoHistory btn btn-sm btn-outline-secondary toolbar-btn"
               title="Redo last action (Ctrl+Y)"
             >
-              &#10227; Redo <span class="redoState"></span>
+              &#10227; Redo · <span class="redoState"></span>
             </button>
           </div>
         </div>
@@ -1078,11 +1079,11 @@
             style="display: flex; flex-direction: row; gap: 10px"
           >
             <!-- Drag & Drop switch -->
-            <!-- <label class="toolbar-switch-label" title="Toggle Drag &amp; Drop">
+            <label class="toolbar-switch-label" title="Toggle Drag &amp; Drop">
               <input type="checkbox" id="dragDropSwitch" />
               <span class="toolbar-switch-track"></span>
               <span class="toolbar-switch-text">DRAG-DROP</span>
-            </label> -->
+            </label>
 
             <div class="input-toolbar-divider"></div>
 
@@ -1736,10 +1737,16 @@
       (function () {
         // Restore saved theme on load
         var saved = localStorage.getItem("tifany-theme");
+        function _applyThemeIcons(isDark) {
+          document.querySelectorAll('.theme-icon-sun').forEach(function(el) { el.style.display = isDark ? 'none' : ''; });
+          document.querySelectorAll('.theme-icon-moon').forEach(function(el) { el.style.display = isDark ? '' : 'none'; });
+        }
+
         if (saved === "dark") {
           document.documentElement.setAttribute("data-theme", "dark");
-          var icon = document.querySelector(".theme-icon");
-          if (icon) icon.textContent = "☾";
+          _applyThemeIcons(true);
+        } else {
+          _applyThemeIcons(false);
         }
 
         document
@@ -1749,12 +1756,12 @@
               document.documentElement.getAttribute("data-theme") === "dark";
             if (isDark) {
               document.documentElement.setAttribute("data-theme", "light");
-              this.querySelector(".theme-icon").textContent = "☀";
+              _applyThemeIcons(false);
               if (window.monaco) monaco.editor.setTheme("vs");
               localStorage.setItem("tifany-theme", "light");
             } else {
               document.documentElement.setAttribute("data-theme", "dark");
-              this.querySelector(".theme-icon").textContent = "☾";
+              _applyThemeIcons(true);
               if (window.monaco) monaco.editor.setTheme("vs-dark");
               localStorage.setItem("tifany-theme", "dark");
             }

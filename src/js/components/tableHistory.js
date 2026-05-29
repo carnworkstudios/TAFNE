@@ -1,221 +1,174 @@
-// js/classes/tableHistory.js
-// ===================================================================================
-// 2. TABLE HISTORY MANAGER
-// ===================================================================================
-class TableHistoryManager {
-    constructor(maxHistory = 50) {
-        this.history = [];
-        this.currentIndex = -1;
-        this.maxHistory = maxHistory;
-        this.isRestoring = false; // Flag to prevent saving during undo/redo
-    }
+// js/components/tableHistory.js
+// Per-table, per-sheet history. Each (sheetId, tableId) pair gets its own
+// 50-state stack, so operations on one table never crowd out another.
 
-    saveState(tableHtml) {
-        // Don't save if we're restoring a state
-        if (this.isRestoring) return;
+const MAX_PER_SLOT = 50;
 
-        // Don't save empty states
-        if (!tableHtml || tableHtml.trim() === '') return;
+// Map<string, {history: string[], currentIndex: number}>
+// Key: `${sheetId}::${tableId}`
+const _slots = new Map();
 
-        // Don't save if it's the same as the current state
-        if (this.currentIndex >= 0 && this.history[this.currentIndex] === tableHtml) {
-            return;
-        }
+let _isRestoring = false;
 
-        // Remove future states if we're not at the end
-        this.history = this.history.slice(0, this.currentIndex + 1);
-
-        this.history.push(tableHtml);
-
-        // Limit history size
-        if (this.history.length > this.maxHistory) {
-            this.history.shift();
-        } else {
-            this.currentIndex++;
-        }
-
-        console.log(`History saved. Current index: ${this.currentIndex}, Total states: ${this.history.length}`);
-        // $('.undoState').text(`States: ${this.currentIndex}`);
-        this.updateHistoryButtons();
-    }
-
-    undo() {
-        if (this.canUndo()) {
-            this.currentIndex--;
-            console.log(`Undo to index: ${this.currentIndex}`);
-            this.updateHistoryButtons();
-            return this.history[this.currentIndex];
-        }
-        console.log('Cannot undo - at beginning of history');
-        return null;
-    }
-
-    redo() {
-        if (this.canRedo()) {
-            this.currentIndex++;
-            console.log(`Redo to index: ${this.currentIndex}`);
-            this.updateHistoryButtons();
-            return this.history[this.currentIndex];
-        }
-        console.log('Cannot redo - at end of history');
-        return null;
-    }
-
-    canUndo() {
-        return this.currentIndex > 0;
-    }
-
-    canRedo() {
-        return this.currentIndex < this.history.length - 1;
-    }
-
-    clear() {
-        this.history = [];
-        this.currentIndex = -1;
-        this.updateHistoryButtons();
-        console.log('History cleared');
-    }
-
-    updateHistoryButtons() {
-        const undoCount = this.currentIndex;
-        const redoCount = this.history.length - this.currentIndex - 1;
-        
-        if (this.currentIndex != -1) {
-            $('.undoState').text(`${undoCount}`)
-        };
-        if(this.currentIndex == -1){
-            $('.redoState').text(`${redoCount}`)
-        };
-        
-        // Enable/disable buttons
-        $('.undoHistory').prop('disabled', !this.canUndo());
-        $('.redoHistory').prop('disabled', !this.canRedo());
-        
-        // Update button appearance
-        if (this.canUndo()) {
-            $('.undoHistory').css('opacity', '1');
-        } else {
-            $('.undoHistory').css('opacity', '0.5');
-        }
-        
-        if (this.canRedo()) {
-            $('.redoHistory').css('opacity', '1');
-        } else {
-            $('.redoHistory').css('opacity', '0.5');
-        }
-    }
+function _slotKey(sheetId, tableId) {
+    return `${sheetId ?? 'default'}::${tableId ?? 'default'}`;
 }
 
-// Initialize global history manager
-window.historyManager = new TableHistoryManager();
-
-// ===================================================================================
-// 3. HISTORY FUNCTIONS
-// ===================================================================================
-
-function restoreActiveTable(activeId) {
-    // Try to restore the previously active table by data-tifany-id
-    if (activeId) {
-        const found = $(`#tableContainer table[data-tifany-id="${activeId}"]`)[0];
-        window.currentTable = found || $('#tableContainer table')[0];
-    } else {
-        window.currentTable = $('#tableContainer table')[0];
+function _getSlot(key) {
+    if (!_slots.has(key)) {
+        _slots.set(key, { history: [], currentIndex: -1 });
     }
+    return _slots.get(key);
+}
+
+function _currentKey() {
+    const sheetId = window.activeSheetId ?? 'default';
+    const tableId = window.currentTable
+        ? ($(window.currentTable).attr('data-tifany-id') ?? 'default')
+        : 'default';
+    return _slotKey(sheetId, tableId);
+}
+
+// ------------------------------------------------------------------
+// Public API (mirrors old TableHistoryManager surface)
+// ------------------------------------------------------------------
+
+function saveCurrentState() {
+    if (_isRestoring) return;
+    if (!window.currentTable) return;
+
+    const tableHtml = window.currentTable.outerHTML;
+    if (!tableHtml || tableHtml.trim() === '') return;
+
+    const key = _currentKey();
+    const slot = _getSlot(key);
+
+    if (slot.currentIndex >= 0 && slot.history[slot.currentIndex] === tableHtml) return;
+
+    // Truncate any redo tail
+    slot.history = slot.history.slice(0, slot.currentIndex + 1);
+    slot.history.push(tableHtml);
+
+    if (slot.history.length > MAX_PER_SLOT) {
+        slot.history.shift();
+    } else {
+        slot.currentIndex++;
+    }
+
+    _updateButtons(key);
 }
 
 function performUndo() {
-    const activeId = window.currentTable ? $(window.currentTable).attr('data-tifany-id') : null;
-    const state = window.historyManager.undo();
-    if (state) {
-        window.historyManager.isRestoring = true;
+    if (!window.currentTable) return;
+    const key = _currentKey();
+    const slot = _getSlot(key);
 
-        $('#tableContainer').html(state);
-        restoreActiveTable(activeId);
-
-        if (typeof window.initializeAllFeatures === 'function') {
-            window.initializeAllFeatures();
-        }
-        if (typeof window.setupTableInteraction === 'function') {
-            window.setupTableInteraction();
-        }
-
-        window.historyManager.isRestoring = false;
-
-        $.toast({
-            heading: 'Undo',
-            text: 'Action undone',
-            icon: 'info',
-            loader: false,
-            stack: false,
-            position: 'top-right',
-            hideAfter: 2000
-        });
-
-        console.log('Undo performed successfully');
-    } else {
-        $.toast({
-            heading: 'Info',
-            text: 'Nothing to undo',
-            icon: 'info',
-            loader: false,
-            stack: false,
-            position: 'top-right',
-            hideAfter: 2000
-        });
+    if (slot.currentIndex <= 0) {
+        $.toast({ heading: 'Info', text: 'Nothing to undo', icon: 'info', loader: false, stack: false, position: 'top-right', hideAfter: 2000 });
+        return;
     }
+
+    slot.currentIndex--;
+    _restoreSlot(key, slot);
+
+    $.toast({ heading: 'Undo', text: 'Action undone', icon: 'info', loader: false, stack: false, position: 'top-right', hideAfter: 2000 });
 }
 
 function performRedo() {
-    const activeId = window.currentTable ? $(window.currentTable).attr('data-tifany-id') : null;
-    const state = window.historyManager.redo();
-    if (state) {
-        window.historyManager.isRestoring = true;
+    if (!window.currentTable) return;
+    const key = _currentKey();
+    const slot = _getSlot(key);
 
-        $('#tableContainer').html(state);
-        restoreActiveTable(activeId);
+    if (slot.currentIndex >= slot.history.length - 1) {
+        $.toast({ heading: 'Info', text: 'Nothing to redo', icon: 'info', loader: false, stack: false, position: 'top-right', hideAfter: 2000 });
+        return;
+    }
 
-        if (typeof window.initializeAllFeatures === 'function') {
-            window.initializeAllFeatures();
-        }
-        if (typeof window.setupTableInteraction === 'function') {
-            window.setupTableInteraction();
-        }
+    slot.currentIndex++;
+    _restoreSlot(key, slot);
 
-        window.historyManager.isRestoring = false;
+    $.toast({ heading: 'Redo', text: 'Action redone', icon: 'info', loader: false, stack: false, position: 'top-right', hideAfter: 2000 });
+}
 
-        $.toast({
-            heading: 'Redo',
-            text: 'Action redone',
-            icon: 'info',
-            loader: false,
-            stack: false,
-            position: 'top-right',
-            hideAfter: 2000
-        });
+function _restoreSlot(key, slot) {
+    _isRestoring = true;
 
-        console.log('Redo performed successfully');
+    const tableHtml = slot.history[slot.currentIndex];
+    const tableId = window.currentTable
+        ? $(window.currentTable).attr('data-tifany-id')
+        : null;
+
+    // Replace just the target table in-place. The ruler wrap is rebuilt by
+    // setupTableInteraction — we only need to swap the <table> element.
+    const $target = tableId
+        ? $(`#tableContainer table[data-tifany-id="${tableId}"]`)
+        : $(`#tableContainer table`).first();
+
+    if ($target.length) {
+        $target.replaceWith(tableHtml);
+        // Re-resolve currentTable after replacement
+        window.currentTable = tableId
+            ? $(`#tableContainer table[data-tifany-id="${tableId}"]`)[0]
+            : $(`#tableContainer table`)[0];
     } else {
-        $.toast({
-            heading: 'Info',
-            text: 'Nothing to redo',
-            icon: 'info',
-            loader: false,
-            stack: false,
-            position: 'top-right',
-            hideAfter: 2000
-        });
+        // Fallback: table not found (deleted?), do nothing
+        _isRestoring = false;
+        return;
     }
+
+    if (typeof window.initializeAllFeatures === 'function') window.initializeAllFeatures();
+    if (typeof window.setupTableInteraction === 'function') window.setupTableInteraction();
+
+    _isRestoring = false;
+    _updateButtons(key);
 }
 
-function saveCurrentState() {
-    if (window.currentTable && !window.historyManager.isRestoring) {
-        const state = $('#tableContainer').html();
-        window.historyManager.saveState(state);
-        console.log('Current state saved');
-    }
+function _updateButtons(key) {
+    const slot = _getSlot(key);
+    const canUndo = slot.currentIndex > 0;
+    const canRedo = slot.currentIndex < slot.history.length - 1;
+
+    const undoCount = slot.currentIndex;
+    const redoCount = slot.history.length - slot.currentIndex - 1;
+
+    if (slot.currentIndex !== -1) $('.undoState').text(`${undoCount}`);
+    if (slot.currentIndex === -1) $('.redoState').text(`${redoCount}`);
+
+    $('.undoHistory').prop('disabled', !canUndo).css('opacity', canUndo ? '1' : '0.5');
+    $('.redoHistory').prop('disabled', !canRedo).css('opacity', canRedo ? '1' : '0.5');
 }
 
-// Make functions globally accessible
+// Clear history for a specific table slot (e.g. on sheet delete or table reset)
+function clearTableHistory(sheetId, tableId) {
+    const key = _slotKey(sheetId, tableId);
+    _slots.delete(key);
+    _updateButtons(_currentKey());
+}
+
+// Clear all slots for a sheet (called when a sheet is deleted)
+function clearSheetHistory(sheetId) {
+    for (const key of _slots.keys()) {
+        if (key.startsWith(`${sheetId}::`)) _slots.delete(key);
+    }
+    _updateButtons(_currentKey());
+}
+
+// Legacy shim: gated node editor calls window.historyManager.saveState/isRestoring
+window.historyManager = {
+    get isRestoring() { return _isRestoring; },
+    set isRestoring(v) { _isRestoring = v; },
+    saveState() {},  // node editor is gated; no-op keeps it from crashing
+    clear() { _slots.clear(); _updateButtons(_currentKey()); }
+};
+
+// Call after switching sheets or tables to reflect the new slot's undo/redo state
+function syncHistoryButtons() {
+    _updateButtons(_currentKey());
+}
+
+window.saveCurrentState = saveCurrentState;
 window.performUndo = performUndo;
 window.performRedo = performRedo;
-window.saveCurrentState = saveCurrentState;
+window.clearTableHistory = clearTableHistory;
+window.clearSheetHistory = clearSheetHistory;
+window.syncHistoryButtons = syncHistoryButtons;

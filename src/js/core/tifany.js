@@ -76,6 +76,7 @@ $(function () {
                 window.selectedCells = [];
                 window.selectionAnchorCell = null;
                 window.selectionHeadCell = null;
+                if (typeof window.syncHistoryButtons === 'function') window.syncHistoryButtons();
             }
 
             // Mark table as the active interaction context.
@@ -653,6 +654,13 @@ $(function () {
                 $('#tableContainer table.tablecoil').each(function () {
                     window.renderTableRulers(this);
                 });
+            });
+        }
+
+        // Wire always-on dblclick+drag cell swap (activates toggle automatically on first use)
+        if (typeof window.setupCellDrag === 'function') {
+            $('#tableContainer table.tablecoil').each(function () {
+                window.setupCellDrag(this);
             });
         }
     }
