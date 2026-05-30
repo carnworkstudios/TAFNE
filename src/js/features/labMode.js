@@ -870,7 +870,7 @@ function _labRenderPicker() {
     });
 
     displayOrder.forEach(function (group) {
-        if (!groups[group].length) return;
+        if (!groups[group] || !groups[group].length) return;
         html += '<div class="lab-picker-group lab-picker-' + group + (group === mode ? ' lab-picker-active-group' : '') + '">';
         html += '<div class="lab-picker-group-label">' + group + '</div>';
         groups[group].forEach(function (item) {

@@ -67,6 +67,16 @@ function _buildPalette(palette) {
         });
         palette.appendChild(btn);
     });
+
+    // Pro-gated: Condition node
+    const condWrap = document.createElement('div');
+    condWrap.className = 'ne-palette-item gx-pro-locked';
+    condWrap.style.position = 'relative';
+    condWrap.innerHTML = `
+        <span class="ne-palette-icon" style="background:#7c3aed">⑂</span>
+        <span class="ne-palette-info"><strong>Condition <span class="gx-pro-badge">PRO</span></strong><em>Route rows through If/Else branches</em></span>
+        <div class="gx-pro-interceptor" data-pro-feature="node-condition"></div>`;
+    palette.appendChild(condWrap);
 }
 
 function _placeOperatorNode(type) {

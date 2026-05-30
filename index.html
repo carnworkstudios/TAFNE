@@ -301,7 +301,11 @@
     <link rel="stylesheet" href="src/css/tifanyUI.css" />
     <link rel="stylesheet" href="src/css/nodeEditor.css" />
     <!-- GINEXYS Gate + Star Nudge -->
+    <!-- Tokens load first so modals render correctly in environments where
+         portfolio.css isn't reachable (e.g. VS Code webview sandbox). -->
+    <link rel="stylesheet" href="/assets/css/ginexys-modals-tokens.css" />
     <link rel="stylesheet" href="/assets/css/ginexys-modals.css" />
+    <script src="/assets/js/ginexys-modals.js" defer></script>
     <script src="/assets/js/ginexys-gate.js" defer></script>
     <!-- Shared portfolio CSS (header/logo styles) -->
     <link rel="stylesheet" href="../../assets/css/portfolio.css" />
@@ -991,6 +995,7 @@
                 </button>
                 <button class="lab-tab" data-mode="transform">Transform</button>
                 <button class="lab-tab" data-mode="analyze">Analyze</button>
+                <button class="lab-tab" data-mode="cloud">Cloud <span class="gx-pro-badge">PRO</span></button>
                 <div class="lab-tab-spacer"></div>
                 <button
                   id="labRecipeToggle"
@@ -1034,6 +1039,19 @@
                   id="monaco-draw-container"
                   class="draw-monaco-container lab-recipe-monaco"
                 ></div>
+              </div>
+              <!-- Cloud Pro panel (hidden by default, shown when Cloud tab active) -->
+              <div id="labCloudPanel" class="lab-cloud-pro-panel" style="display:none">
+                <div class="analyze-paywall-badge">PRO</div>
+                <h3 style="margin:0 0 8px;font-size:16px;font-weight:700;">TAFNE Cloud</h3>
+                <p style="font-size:13px;opacity:.7;margin:0 0 16px;max-width:320px;">Run pipelines on a schedule, push outputs to any webhook, and save pipeline graphs as reusable presets.</p>
+                <ul class="analyze-paywall-features" style="max-width:320px;">
+                  <li>Scheduled pipeline runs</li>
+                  <li>API write-back output node</li>
+                  <li>Save &amp; load pipeline presets</li>
+                  <li>Conditional routing (If/Else) nodes</li>
+                </ul>
+                <button class="analyze-paywall-btn" id="labCloudWaitlist">Join Pro Waitlist</button>
               </div>
             </div>
             <!-- Drag-resize splitter (same ID — resize JS reuses it) -->
@@ -1975,23 +1993,77 @@
 
     <!-- ==================== CWS IPC: SCHEMA EDITOR BRIDGE ==================== -->
     <script>
+      // Pro waitlist trigger: emit IPC when embedded in the OS, open local modal when standalone.
+      var TAFNE_PRO_COPY = {
+        'back-annotate':    'Back-Annotate sends your TAFNE component data back to Schema Editor. Join the waitlist to get early access.',
+        'node-condition':   'Conditional routing (If/Else) nodes are a Pro feature. Join the waitlist and be first in line.',
+        'node-multicolumn': 'Multi-column edit mode is a Pro feature. Join the waitlist to get early access when it ships.',
+        'lab-cloud':        'Scheduled runs, API write-back, and pipeline presets are Pro features. Join the waitlist to get early access.',
+      };
+      function openProWaitlist(featureSlug, subtitle) {
+        var copy = subtitle || TAFNE_PRO_COPY[featureSlug] || 'This is a Pro feature. Join the waitlist to get early access when Pro launches.';
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: 'gx:pro-gate-click', featureSlug: featureSlug, subtitle: copy }, '*');
+        } else if (window.GxModals) {
+          window.GxModals.open('pro_waitlist', { featureSlug: featureSlug, subtitle: copy });
+        }
+      }
+
       // Wire Ginexys Send button — always present, works standalone or embedded
       (function () {
         var sendBtn = document.getElementById("tafneSendBtn");
         if (!sendBtn) return;
         sendBtn.addEventListener("click", function () {
-          if (window.parent !== window && window.parent.OsShell) {
+          if (window.parent !== window) {
             window.parent.postMessage({ type: "gx:open-ipc-panel" }, "*");
           } else {
-            var GxM = window.GxModals;
-            if (GxM)
-              GxM.open("pro_waitlist", {
-                featureSlug: "ipc-cross-tool",
-                subtitle:
-                  "Send your TAFNE data to PDF Processor or Schema Editor. Cross-tool flow is a Pro feature.",
-              });
+            openProWaitlist('ipc-cross-tool', 'Send your TAFNE data to PDF Processor or Schema Editor. Cross-tool flow is a Pro feature.');
           }
         });
+      })();
+
+      // Pro gates + cloud tab — always run (standalone and embedded)
+      (function () {
+        // Delegated interceptor: clicking any .gx-pro-interceptor opens the waitlist modal
+        document.addEventListener("click", function (e) {
+          var interceptor = e.target.closest(".gx-pro-interceptor");
+          if (!interceptor) return;
+          openProWaitlist(interceptor.dataset.proFeature);
+        });
+
+        // Cloud tab toggle
+        document.addEventListener("click", function (e) {
+          var tab = e.target.closest(".lab-tab");
+          if (!tab) return;
+          var mode = tab.dataset.mode;
+          var cloudPanel = document.getElementById("labCloudPanel");
+          if (!cloudPanel) return;
+          if (mode === "cloud") {
+            ["labFnPicker","labStepList","labRecipeSection"].forEach(function(id) {
+              var el = document.getElementById(id);
+              if (el) el.style.display = "none";
+            });
+            var addBar = document.querySelector(".lab-add-step-bar");
+            if (addBar) addBar.style.display = "none";
+            cloudPanel.style.display = "flex";
+            cloudPanel.style.flexDirection = "column";
+            cloudPanel.style.alignItems = "center";
+            cloudPanel.style.justifyContent = "center";
+            cloudPanel.style.padding = "40px 24px";
+            cloudPanel.style.textAlign = "center";
+            cloudPanel.style.flex = "1";
+          } else {
+            cloudPanel.style.display = "none";
+          }
+        });
+
+        // Cloud waitlist button
+        var cloudBtn = document.getElementById("labCloudWaitlist");
+        if (cloudBtn) {
+          cloudBtn.addEventListener("click", function () {
+            openProWaitlist('lab-cloud');
+          });
+        }
       })();
 
       (function () {
@@ -2003,23 +2075,6 @@
           if (btn) btn.style.display = "";
           if (gate) gate.style.display = "";
         }
-
-        // Delegated interceptor: clicking the Pro gate overlay opens the waitlist modal
-        document.addEventListener("click", function (e) {
-          var interceptor = e.target.closest(".gx-pro-interceptor");
-          if (!interceptor) return;
-          var featureSlug = interceptor.dataset.proFeature;
-          var GxM =
-            window.parent && window.parent.GxModals
-              ? window.parent.GxModals
-              : window.GxModals;
-          if (GxM)
-            GxM.open("pro_waitlist", {
-              featureSlug: featureSlug,
-              subtitle:
-                "Back-Annotate sends your TAFNE component data back to Schema Editor. This is a Pro feature.",
-            });
-        });
 
         // Flow 1 receive: Schema Editor → TAFNE (load-diagram / load-netlist)
         CwsBridge.onData(async function (envelope) {

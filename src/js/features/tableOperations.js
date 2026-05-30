@@ -219,8 +219,6 @@ function deleteRows() {
         rows.add($(cell).parent()[0]);
     });
 
-    if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
-
     // Disconnect ruler observer before mutating so it doesn't race with renderTableRulers
     if (table && table._tafneStructObs) table._tafneStructObs.disconnect();
 
@@ -232,6 +230,11 @@ function deleteRows() {
     // Clear selection
     window.selectedCells = [];
 
+    // Snapshot AFTER mutation so each user action gets a distinct undo slot
+    // (the dedup check in saveCurrentState would otherwise collapse this with
+    //  the previous post-mutation snapshot).
+    if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+
     $.toast({
         heading: 'Success',
         text: 'Row(s) deleted',
@@ -241,11 +244,9 @@ function deleteRows() {
     });
 
     // Rebuild ruler immediately, then re-init interaction
-    console.log('[deleteRows] table=', table, 'rows after delete=', table ? table.rows.length : 'N/A', 'renderTableRulers=', typeof window.renderTableRulers, '_tafneRulerRebuilding=', table && table._tafneRulerRebuilding);
     if (table && typeof window.renderTableRulers === 'function') {
         window.renderTableRulers(table);
     }
-    console.log('[deleteRows] after renderTableRulers, rowSegs=', table ? $(table).closest('.tafne-ruler-wrap').find('.tafne-row-ruler .ruler-seg').length : 'N/A');
     window.setupTableInteraction();
 }
 
@@ -268,8 +269,6 @@ function deleteColumns() {
     // Sort descending so removing right-to-left doesn't shift indices
     const colsArray = Array.from(columns).sort((a, b) => b - a);
 
-    if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
-
     // Disconnect ruler observer before mutating so it doesn't race with renderTableRulers
     if (table._tafneStructObs) table._tafneStructObs.disconnect();
 
@@ -281,6 +280,11 @@ function deleteColumns() {
 
     // Clear selection
     window.selectedCells = [];
+
+    // Snapshot AFTER mutation so each user action gets a distinct undo slot
+    // (the dedup check in saveCurrentState would otherwise collapse this with
+    //  the previous post-mutation snapshot).
+    if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
 
     $.toast({
         heading: 'Success',
@@ -646,16 +650,43 @@ function applyMultiCellEdit() {
     $.toast({ heading: 'Done', text: 'Cells updated', icon: 'success', loader: false, stack: false });
 }
 
+// ── Scope-aware routers ──────────────────────────────────────────────────────
+// When the active selection came from the ruler, #elementType is 'row' or
+// 'column' and these routers fire the matching row/col operation. Otherwise
+// they fall back to the cell-level operation. Keyboard shortcuts and any other
+// caller that should respect ruler intent goes through these.
+function deleteSelected() {
+    const type = $('#elementType').val();
+    if (type === 'row')    return deleteRows();
+    if (type === 'column') return deleteColumns();
+    return deleteCell();
+}
+function addSelectedAfter() {
+    const type = $('#elementType').val();
+    if (type === 'row')    return addRow();
+    if (type === 'column') return addColumn();
+    return addCell();
+}
+function addSelectedBefore() {
+    const type = $('#elementType').val();
+    if (type === 'row')    return addRowBefore();
+    if (type === 'column') return addColumnBefore();
+    return addCellBefore();
+}
+
 // Make functions globally accessible
-window.addCell         = addCell;
-window.addCellBefore   = addCellBefore;
-window.deleteCell      = deleteCell;
-window.deleteRows      = deleteRows;
-window.deleteColumns   = deleteColumns;
-window.addRow          = addRow;
-window.addRowBefore    = addRowBefore;
-window.addColumn       = addColumn;
-window.addColumnBefore = addColumnBefore;
-window.mergeCells      = mergeCells;
+window.addCell           = addCell;
+window.addCellBefore     = addCellBefore;
+window.deleteCell        = deleteCell;
+window.deleteRows        = deleteRows;
+window.deleteColumns     = deleteColumns;
+window.addRow            = addRow;
+window.addRowBefore      = addRowBefore;
+window.addColumn         = addColumn;
+window.addColumnBefore   = addColumnBefore;
+window.mergeCells        = mergeCells;
+window.deleteSelected    = deleteSelected;
+window.addSelectedAfter  = addSelectedAfter;
+window.addSelectedBefore = addSelectedBefore;
 window.openMultiCellEdit  = openMultiCellEdit;
 window.applyMultiCellEdit = applyMultiCellEdit;

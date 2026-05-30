@@ -399,24 +399,25 @@ $(function () {
             const ctrl = e.ctrlKey || e.metaKey;
 
             if ((key === 'delete' || key === 'backspace') && !e.altKey && !e.shiftKey) {
+                // Delete/Backspace → scope-aware delete (row/col when ruler-selected, else cell)
                 if (!isTableContext()) return;
                 e.preventDefault();
-                if (typeof deleteCell === 'function') deleteCell();
+                if (typeof deleteSelected === 'function') deleteSelected();
             } else if ((key === 'insert' || (ctrl && key === 'enter')) && !e.shiftKey && !e.repeat) {
-                // Insert or Ctrl/Cmd+Enter → Add Cell After
+                // Insert or Ctrl/Cmd+Enter → scope-aware Add After
                 if (!isTableContext()) return;
                 e.preventDefault();
-                if (typeof addCell === 'function') addCell();
+                if (typeof addSelectedAfter === 'function') addSelectedAfter();
             } else if ((key === 'insert' || (ctrl && key === 'enter')) && e.shiftKey && !e.repeat) {
-                // Shift+Insert or Shift+Ctrl/Cmd+Enter → Add Cell Before
+                // Shift+Insert or Shift+Ctrl/Cmd+Enter → scope-aware Add Before
                 if (!isTableContext()) return;
                 e.preventDefault();
-                if (typeof addCellBefore === 'function') addCellBefore();
+                if (typeof addSelectedBefore === 'function') addSelectedBefore();
             } else if ((key === 'delete' || key === 'backspace') && e.shiftKey && !e.altKey) {
-                // Shift+Delete/Backspace → Delete Cell
+                // Shift+Delete/Backspace → scope-aware delete (same routing as plain Delete)
                 if (!isTableContext()) return;
                 e.preventDefault();
-                if (typeof deleteCell === 'function') deleteCell();
+                if (typeof deleteSelected === 'function') deleteSelected();
             } else if (ctrl && key === 'a') {
                 // Ctrl+A → Select all cells
                 if (!isTableContext()) return;
@@ -1258,6 +1259,13 @@ $(function () {
     }
 
     // Mode routing: switch to the requested mode after the tool finishes initializing.
+    // Source priority: __GINEXYS_INITIAL_MODE__ (VS Code extension injects) > ?view= (web OS deep link).
+    // Accepted slugs: 'node-editor' (alias: 'node'), 'lab' (alias: 'lab-mode'), 'table' / 'table-mode' / 'draw' / 'draw-mode' (no-op — default).
+    var _viewQuery = new URLSearchParams(location.search).get('view');
+    var _viewAlias = { 'node': 'node-editor', 'lab-mode': 'lab', 'table-mode': 'table', 'draw-mode': 'draw' };
+    if (!window.__GINEXYS_INITIAL_MODE__ && _viewQuery) {
+        window.__GINEXYS_INITIAL_MODE__ = _viewAlias[_viewQuery] || _viewQuery;
+    }
     if (window.__GINEXYS_INITIAL_MODE__) {
         var _mode = window.__GINEXYS_INITIAL_MODE__;
         setTimeout(function () {
