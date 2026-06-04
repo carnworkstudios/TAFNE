@@ -62,9 +62,11 @@ function enableLab() {
         setTimeout(function () { window.tifanyMonacoDraw.layout(); }, 50);
     }
 
-    // Render empty state
+    // Render empty state then open picker immediately so user can start building
     _labRenderStepList();
     _labSetMode(window._labState.mode);
+    _labRenderPicker();
+    $('#labFnPicker').show();
 
     // Result pane: show row count loaded
     var count = window._labState.rows.length;
@@ -1012,9 +1014,16 @@ function initLabCanvas() {
     $('#labSubmitBtn').on('click',   labSubmit);
     $('#labRecipeToggle').on('click', _labToggleRecipe);
 
-    // Mode tab switching
+    // Mode tab switching -- if pipeline is empty, keep picker open and re-render for new tab
     $(document).on('click', '.lab-tab', function () {
-        _labSetMode($(this).data('mode'));
+        var mode = $(this).data('mode');
+        if (mode === 'cloud') return; // cloud tab handled separately
+        _labSetMode(mode);
+        var isEmpty = window._labState.pipeline.length === 0;
+        if (isEmpty || $('#labFnPicker').is(':visible')) {
+            _labRenderPicker();
+            $('#labFnPicker').show();
+        }
     });
 
     // Close picker when clicking outside

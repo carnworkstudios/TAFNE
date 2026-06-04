@@ -349,6 +349,31 @@
           >?</a
         >
       </nav>
+
+        <!-- MCP Pill (VS Code only) -->
+        <div class="input-toolbar-divider"></div>
+        <div class="gx-mcp-pill-wrap" id="mcpPillWrap">
+            <button class="gx-mcp-pill" id="mcpPillBtn" aria-label="Use with Copilot" aria-expanded="false">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>
+                MCP
+            </button>
+            <div class="gx-mcp-popover" id="mcpPopover" role="tooltip">
+                <div class="gx-mcp-popover-title">Use with Copilot</div>
+                <div class="gx-mcp-popover-ref">
+                    <span>#ginexys_format_table</span>
+                    <button title="Copy" onclick="navigator.clipboard.writeText('#ginexys_format_table')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    </button>
+                </div>
+                <div class="gx-mcp-popover-sample">
+                    Sample prompt:
+                    <code>#ginexys_format_table format this as markdown: Name,Age,City</code>
+                </div>
+                <div class="gx-mcp-popover-docs">
+                    <a href="https://ginexys.com/docs#mcp-tools" target="_blank">Full MCP docs &rarr;</a>
+                </div>
+            </div>
+        </div>
       <!-- CWS: back-annotate to Schema Editor (hidden when standalone) -->
       <!-- <button id="backAnnotateBtn" class="btn btn-sm" title="Back-annotate component labels to Schema Editor"
             style="display:none; background: rgba(79, 172, 254, 0.15); border: 1px solid rgba(79, 172, 254, 0.4); color: #4facfe; font-weight: 600; margin-left: 12px;">
@@ -970,8 +995,7 @@
         <div id="labCanvas" class="draw-canvas">
           <div class="draw-canvas-header">
             <span
-              ><i class="fas fa-flask"></i> Lab Mode &mdash; validate, transform
-              &amp; analyze table data</span
+              ><i class="fas fa-flask"></i> Lab Mode</span
             >
             <div class="draw-canvas-header-actions">
               <button
@@ -999,6 +1023,12 @@
                 <button class="lab-tab" data-mode="cloud">Cloud <span class="gx-pro-badge">PRO</span></button>
                 <div class="lab-tab-spacer"></div>
                 <button
+                  id="labAddStep"
+                  class="btn btn-xs btn-outline-primary"
+                >
+                  <i class="fas fa-plus"></i> Add Step
+                </button>
+                <button
                   id="labRecipeToggle"
                   class="btn btn-xs btn-outline-secondary lab-recipe-btn"
                 >
@@ -1020,15 +1050,8 @@
               <!-- Step list (scrollable) -->
               <div id="labStepList" class="lab-step-list">
                 <div class="lab-step-empty">
-                  No steps yet &mdash; click <strong>+ Add Step</strong> to
-                  begin.
+                  Select a step from the list above to begin.
                 </div>
-              </div>
-              <!-- Add Step bar -->
-              <div class="lab-add-step-bar">
-                <button id="labAddStep" class="btn btn-sm btn-outline-primary">
-                  <i class="fas fa-plus"></i> Add Step
-                </button>
               </div>
               <!-- Recipe section: Monaco read-only (hidden by default) -->
               <div
@@ -2075,7 +2098,48 @@
           var gate = document.getElementById("backAnnotateProGate");
           if (btn) btn.style.display = "";
           if (gate) gate.style.display = "";
+          document.body.classList.add("gx-embedded");
+          (function () {
+            var pill = document.getElementById("mcpPillBtn");
+            var pop  = document.getElementById("mcpPopover");
+            if (!pill || !pop) return;
+            document.body.appendChild(pop);
+            pill.addEventListener("click", function (e) {
+              e.stopPropagation();
+              var open = pop.classList.toggle("open");
+              pill.setAttribute("aria-expanded", open ? "true" : "false");
+              if (open) {
+                var r = pill.getBoundingClientRect();
+                pop.style.top  = (r.bottom + 8) + "px";
+                pop.style.left = Math.max(8, r.right - 340) + "px";
+              }
+            });
+            document.addEventListener("click", function () {
+              pop.classList.remove("open");
+              pill.setAttribute("aria-expanded", "false");
+            });
+          })();
         }
+
+        // MCP round-trip: extension host requests table export, reply with formatted output
+        window.addEventListener("message", function (e) {
+          var msg = e.data;
+          if (!msg || !msg.__ginexys || msg.type !== "ginexys:mcp-format") return;
+          var format = msg.payload?.format ?? "markdown";
+          var $tables = $(".tifany-table");
+          var formatted = "";
+          try {
+            if (format === "csv")      formatted = typeof exportAsCsv === "function"      ? exportAsCsv(window.currentTable || $tables[0]) : "";
+            else if (format === "html") formatted = typeof exportAsHtml === "function"     ? exportAsHtml() : "";
+            else if (format === "json") formatted = typeof exportAsJson === "function"     ? exportAsJson($tables) : "";
+            else if (format === "sql")  formatted = typeof exportAsSql === "function"      ? exportAsSql($tables) : "";
+            else                        formatted = typeof exportAsMarkdown === "function"  ? exportAsMarkdown($tables) : "";
+          } catch (_) {}
+          CwsBridge.send("ginexys:mcp-reply", {
+            requestId: msg.requestId,
+            payload: { formatted: formatted || null },
+          });
+        });
 
         // Flow 1 receive: Schema Editor → TAFNE (load-diagram / load-netlist)
         CwsBridge.onData(async function (envelope) {

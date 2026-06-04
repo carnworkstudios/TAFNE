@@ -1540,13 +1540,6 @@ body.lab-mode-active #labModeToggle {
 
 /* ── Add Step bar ───────────────────────────────────────────────────────── */
 
-.lab-add-step-bar {
-    flex-shrink: 0;
-    padding: 6px 10px;
-    border-top: 1px solid var(--t-border);
-    background: var(--t-bg-surface);
-}
-
 /* ── Recipe section ─────────────────────────────────────────────────────── */
 
 .lab-recipe-section {
@@ -1720,7 +1713,7 @@ body.node-editor-active #sheetTabBar {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 56px;
+    height: 40px;
     background: var(--t-bg-surface);
     border-top: 1px solid var(--t-border);
     z-index: 600;
@@ -1830,7 +1823,24 @@ body.node-editor-active #sheetTabBar {
     }
 
     .table-wrapper {
-        padding: 8px;
+        padding: 8px 8px 56px;
+        /* visible scrollbar so users know the table continues below the nav */
+        overflow: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--t-border) transparent;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .table-wrapper::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+    .table-wrapper::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .table-wrapper::-webkit-scrollbar-thumb {
+        background: var(--t-border);
+        border-radius: 2px;
     }
 
     /* Show the existing horizontal mobile toolbar */
@@ -1844,7 +1854,7 @@ body.node-editor-active #sheetTabBar {
     .tifany-left-panel.panel-hidden {
         display: block !important;
         position: fixed !important;
-        bottom: 56px;
+        bottom: 0;
         left: 0;
         right: 0;
         top: auto !important;
@@ -1881,7 +1891,7 @@ body.node-editor-active #sheetTabBar {
     .tifany-right-panel {
         display: flex !important;
         position: fixed !important;
-        bottom: 56px;
+        bottom: 0;
         left: 0;
         right: 0;
         top: auto !important;
@@ -1922,9 +1932,20 @@ body.node-editor-active #sheetTabBar {
         min-height: 160px;
     }
 
-    /* Show mobile bottom nav */
+    /* Show mobile bottom nav in table mode only */
     .mobile-bottom-nav {
         display: flex;
+    }
+
+    /* Node Editor and Lab Mode don't use the bottom nav -- hide it */
+    body.node-editor-active .mobile-bottom-nav,
+    body.lab-mode-active .mobile-bottom-nav {
+        display: none;
+    }
+
+    /* Lab Mode: also hide the center-header (step builder owns the full panel) */
+    body.lab-mode-active .center-header {
+        display: none;
     }
 
     /* Right panel resize handle: disable on mobile */
@@ -1986,4 +2007,106 @@ body.node-editor-active #sheetTabBar {
 
 [data-theme="dark"] .mobile-sheet-backdrop {
     background: rgba(0, 0, 0, 0.65);
+}
+/* ── MCP Pill ──────────────────────────────────────────────────────────── */
+.gx-mcp-pill-wrap {
+    position: relative;
+    display: none;
+    align-items: center;
+}
+body.gx-embedded .gx-mcp-pill-wrap { display: flex; }
+
+.gx-mcp-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px 3px 7px;
+    border-radius: 20px;
+    border: 1px solid var(--t-border, rgba(255,255,255,0.12));
+    background: transparent;
+    color: var(--t-text-muted, #888);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s;
+    user-select: none;
+}
+.gx-mcp-pill:hover {
+    border-color: var(--t-accent, #4fa8f5);
+    color: var(--t-accent, #4fa8f5);
+}
+.gx-mcp-pill svg { flex-shrink: 0; }
+
+.gx-mcp-popover {
+    display: none;
+    position: fixed;
+    z-index: 99999;
+    min-width: 280px;
+    max-width: 340px;
+    background: var(--t-bg-surface, #1e1e2e);
+    border: 1px solid var(--t-border, rgba(255,255,255,0.12));
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+    padding: 14px 16px;
+    color: var(--t-text, #e0e0e0);
+    font-size: 12px;
+    line-height: 1.6;
+}
+.gx-mcp-popover.open { display: block; }
+.gx-mcp-popover-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--t-text-muted, #888);
+    margin-bottom: 10px;
+}
+.gx-mcp-popover-ref {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--t-bg-input, rgba(0,0,0,0.2));
+    border: 1px solid var(--t-border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: monospace;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+.gx-mcp-popover-ref button {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    color: var(--t-text-muted, #888);
+    border-radius: 4px;
+}
+.gx-mcp-popover-ref button:hover { color: var(--t-accent, #4fa8f5); }
+.gx-mcp-popover-sample {
+    font-size: 11px;
+    color: var(--t-text-muted, #888);
+    margin-bottom: 4px;
+}
+.gx-mcp-popover-sample code {
+    display: block;
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: var(--t-bg-input, rgba(0,0,0,0.2));
+    border-radius: 5px;
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--t-text, #e0e0e0);
+    word-break: break-word;
+}
+.gx-mcp-popover-docs {
+    margin-top: 10px;
+    font-size: 11px;
+    text-align: right;
+}
+.gx-mcp-popover-docs a {
+    color: var(--t-accent, #4fa8f5);
+    text-decoration: none;
 }
