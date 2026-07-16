@@ -797,3 +797,15 @@
     gap: 8px;
     flex-shrink: 0;
 }
+/* ── Output schema preview (config panel) ── */
+.ne-schema-preview { border-top: 1px solid var(--t-border, #444); padding-top: 10px; margin-top: 6px; }
+.ne-schema-cols { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.ne-schema-col {
+    font-size: 11px; font-family: monospace;
+    padding: 2px 8px; border-radius: 10px;
+    background: var(--t-bg-workspace, #2a2a2a);
+    border: 1px solid var(--t-border, #444);
+    color: var(--t-text, #ddd);
+}
+.ne-schema-col { cursor: pointer; user-select: none; }
+.ne-schema-col-off { opacity: 0.35; text-decoration: line-through; }

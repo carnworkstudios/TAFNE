@@ -272,4 +272,103 @@ function applyTextSplit() {
 };
 
 window.transposeTable = transposeTable;
+
+// ===================================================================================
+// 3b. Partial Transpose — transpose only the selected cell block (row / column / range)
+//     The selection's bounding box is pivoted around its top-left cell, Excel
+//     paste-transpose style. The table grows with blank rows/columns if the
+//     transposed block extends past the current edge.
+// ===================================================================================
+function transposeSelection() {
+    const table = window.currentTable;
+    const cells = window.selectedCells || [];
+
+    if (!table || cells.length === 0) {
+        $.toast({ heading: 'Transpose Selection', text: 'Select the cells, row, or column to transpose first.', icon: 'info', loader: false, stack: false });
+        return;
+    }
+
+    let mapper = new VisualGridMapper(table);
+
+    // Bounding box of the selection; merged cells are not supported
+    let r0 = Infinity, c0 = Infinity, r1 = -1, c1 = -1, hasMerged = false;
+    cells.forEach(cell => {
+        const p = mapper.getVisualPosition(cell);
+        if (!p) return;
+        if (p.rowspan > 1 || p.colspan > 1) hasMerged = true;
+        r0 = Math.min(r0, p.startRow); c0 = Math.min(c0, p.startCol);
+        r1 = Math.max(r1, p.startRow + p.rowspan - 1); c1 = Math.max(c1, p.startCol + p.colspan - 1);
+    });
+
+    if (r1 < 0) return;
+    if (hasMerged) {
+        $.toast({ heading: 'Transpose Selection', text: 'Selection contains merged cells — unmerge them first.', icon: 'warning', loader: false, stack: false });
+        return;
+    }
+
+    const nR = r1 - r0 + 1, nC = c1 - c0 + 1;
+    if (nR === 1 && nC === 1) {
+        $.toast({ heading: 'Transpose Selection', text: 'A single cell has nothing to transpose.', icon: 'info', loader: false, stack: false });
+        return;
+    }
+
+    // Read the block's values before any mutation
+    const block = [];
+    for (let r = 0; r < nR; r++) {
+        block[r] = [];
+        for (let c = 0; c < nC; c++) {
+            const gc = mapper.grid[r0 + r] && mapper.grid[r0 + r][c0 + c];
+            block[r][c] = gc && gc.element ? $(gc.element).html() : '';
+        }
+    }
+
+    // Target region: rows r0..r0+nC-1, cols c0..c0+nR-1
+    const needRows = r0 + nC;
+    const needCols = c0 + nR;
+
+    if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+    if (table._tafneStructObs) table._tafneStructObs.disconnect();
+
+    // Grow the table if the transposed block extends past the current edge
+    const $rows = $(table).find('tr').not('.tifany-drag-row').not('.drop-indicator-row');
+    const curCols = mapper.maxCols;
+    for (let r = $rows.length; r < needRows; r++) {
+        let tr = '<tr>';
+        for (let c = 0; c < Math.max(curCols, needCols); c++) tr += '<td></td>';
+        tr += '</tr>';
+        $(table).find('tr').not('.tifany-drag-row').not('.drop-indicator-row').last().after(tr);
+    }
+    if (needCols > curCols) {
+        $(table).find('tr').not('.tifany-drag-row').not('.drop-indicator-row').each(function () {
+            while (this.cells.length < needCols) $(this).append('<td></td>');
+        });
+    }
+
+    // Re-map after structural changes, verify the target region is unmerged
+    mapper = new VisualGridMapper(table);
+    for (let r = 0; r < nC; r++) {
+        for (let c = 0; c < nR; c++) {
+            const gc = mapper.grid[r0 + r] && mapper.grid[r0 + r][c0 + c];
+            if (gc && gc.element && !gc.isOrigin) {
+                $.toast({ heading: 'Transpose Selection', text: 'Target area overlaps a merged cell — cannot transpose here.', icon: 'warning', loader: false, stack: false });
+                if (typeof renderTableRulers === 'function') renderTableRulers(table);
+                return;
+            }
+        }
+    }
+
+    const _setCell = (R, C, html) => {
+        const gc = mapper.grid[R] && mapper.grid[R][C];
+        if (gc && gc.element) $(gc.element).html(html);
+    };
+
+    // Clear the original block, then write the pivoted values
+    for (let r = 0; r < nR; r++) for (let c = 0; c < nC; c++) _setCell(r0 + r, c0 + c, '');
+    for (let r = 0; r < nR; r++) for (let c = 0; c < nC; c++) _setCell(r0 + c, c0 + r, block[r][c]);
+
+    if (typeof renderTableRulers === 'function') renderTableRulers(table);
+    $.toast({ heading: 'Transpose Selection', text: `Transposed ${nR}×${nC} block.`, icon: 'success', loader: false, stack: false, hideAfter: 1800 });
+}
+
+window.transposeSelection = transposeSelection;
 window.applyTextSplit = applyTextSplit;

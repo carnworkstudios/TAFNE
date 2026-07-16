@@ -847,6 +847,10 @@ $(function () {
         if (typeof transposeTable === 'function') transposeTable();
     });
 
+    $('.transposeSelection').on('click', function () {
+        if (typeof transposeSelection === 'function') transposeSelection();
+    });
+
     $('.toggleCrosshair').on('click', function () {
         if (typeof toggleCrosshair === 'function') toggleCrosshair();
     });

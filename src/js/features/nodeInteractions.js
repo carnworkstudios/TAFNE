@@ -616,6 +616,58 @@ class NodeInteractionManager {
             menu.appendChild(item);
         });
 
+        // ── Connect to an existing operator node ──────────────────────────────
+        // Joins expose their free Left/Right input explicitly, so a second table
+        // can be wired into a Join without dragging a wire across the canvas.
+        const targets = [];
+        Object.values(window.NodeGraph.nodes).forEach(n => {
+            if (n.id === sourceNodeId || !window.NodeTypes.isOperator(n.nodeType)) return;
+            if (n.nodeType === 'join') {
+                ['join-in-left', 'join-in-right'].forEach(portId => {
+                    const taken = Object.values(window.NodeGraph.wires).some(
+                        w => w.targetNodeId === n.id && w.targetPortId === portId
+                    );
+                    if (!taken) targets.push({ nodeId: n.id, portId, label: `${n.label} — ${portId === 'join-in-left' ? 'Left' : 'Right'} input` });
+                });
+            } else {
+                const inHeader = n.headers.find(h => h.direction === 'in');
+                if (!inHeader) return;
+                const alreadyWired = Object.values(window.NodeGraph.wires).some(
+                    w => w.targetNodeId === n.id && w.sourceNodeId === sourceNodeId
+                );
+                if (!alreadyWired) targets.push({ nodeId: n.id, portId: inHeader.portId, label: n.label });
+            }
+        });
+
+        if (targets.length) {
+            const heading2 = document.createElement('div');
+            heading2.className   = 'ne-port-menu-heading';
+            heading2.textContent = 'Connect to existing node';
+            menu.appendChild(heading2);
+
+            targets.forEach(t => {
+                const n    = window.NodeGraph.nodes[t.nodeId];
+                const def  = window.NodeTypes.get(n.nodeType);
+                const item = document.createElement('button');
+                item.className = 'ne-port-menu-item';
+                item.setAttribute('role', 'menuitem');
+                item.innerHTML = `<span class="ne-port-menu-icon" style="background:${def.color}">${def.icon}</span><span>${t.label}</span>`;
+                item.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    window.nodeGraphManager.addWire(sourceNodeId, sourcePortId, t.nodeId, t.portId);
+                    if (typeof window.renderNodeDom === 'function') {
+                        window.renderNodeDom(t.nodeId);
+                        window.renderNodeDom(sourceNodeId);
+                    }
+                    window.nodeCanvasRenderer.markStaticDirty();
+                    if (typeof window.saveNodeEditorState === 'function') window.saveNodeEditorState();
+                    $.toast({ heading: 'Node Editor', text: `Wired to ${t.label}`, icon: 'success', loader: false, stack: false, hideAfter: 2500 });
+                    this._dismissPortMenu();
+                });
+                menu.appendChild(item);
+            });
+        }
+
         // Position near cursor, keep inside viewport
         document.body.appendChild(menu);
         this._portMenuEl = menu;

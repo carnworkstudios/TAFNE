@@ -23,30 +23,45 @@ window.tableRuler = (function () {
 
         // Row heights — read from live <tr> rects
         const rows = Array.from(table.rows).filter(r => !r.classList.contains('tifany-drag-row') && !r.classList.contains('drop-indicator-row'));
+        // Rows with zero height are hidden (collapsed accordion children, sp-hidden) —
+        // hide their ruler segment instead of leaving a mis-sized ghost.
         $rowSegs.each(function (i) {
             const row = rows[i];
             if (!row) return;
             const h = row.getBoundingClientRect().height;
-            if (h > 0) $(this).css({ 'min-height': h + 'px', 'max-height': h + 'px', height: h + 'px' });
-        });
-
-        // Col widths — for each visual col, find the first non-spanning origin cell and read its width
-        const seen = new Array(mapper.maxCols).fill(false);
-        mapper.cellMap.forEach((info, cell) => {
-            if (info.colspan === 1 && !seen[info.startCol]) {
-                const w = cell.getBoundingClientRect().width;
-                if (w > 0) {
-                    seen[info.startCol] = true;
-                    const $seg = $colSegs.filter(`[data-col="${info.startCol}"]`);
-                    $seg.css({ 'min-width': w + 'px', 'max-width': w + 'px', width: w + 'px' });
-                }
+            if (h > 0) {
+                $(this).css({ 'min-height': h + 'px', 'max-height': h + 'px', height: h + 'px', display: '' });
+            } else {
+                $(this).css('display', 'none');
             }
         });
-        // Fallback for any unseen cols (all cells spanning): use average of seen
+
+        // Col widths — for each visual col, find the first non-spanning origin cell and read its width.
+        // Track which cols have ANY visible cell: a col whose cells are all hidden
+        // (e.g. inactive sp-N truncation classes) gets its segment hidden too.
+        const seen       = new Array(mapper.maxCols).fill(false);
+        const hasVisible = new Array(mapper.maxCols).fill(false);
+        mapper.cellMap.forEach((info, cell) => {
+            const w = cell.getBoundingClientRect().width;
+            if (w > 0) {
+                for (let c = info.startCol; c < info.startCol + info.colspan; c++) hasVisible[c] = true;
+            }
+            if (info.colspan === 1 && !seen[info.startCol] && w > 0) {
+                seen[info.startCol] = true;
+                $colSegs.filter(`[data-col="${info.startCol}"]`)
+                    .css({ 'min-width': w + 'px', 'max-width': w + 'px', width: w + 'px', display: '' });
+            }
+        });
+        // Unseen cols: hide segment if the whole column is hidden, else average fallback
         const seenWidths = $colSegs.toArray().map((s, i) => seen[i] ? parseFloat($(s).css('min-width')) || 0 : 0).filter(w => w > 0);
         const avg = seenWidths.length ? Math.round(seenWidths.reduce((a, b) => a + b, 0) / seenWidths.length) : 80;
         $colSegs.each(function (i) {
-            if (!seen[i]) $(this).css({ 'min-width': avg + 'px', 'max-width': avg + 'px', width: avg + 'px' });
+            if (seen[i]) return;
+            if (!hasVisible[i]) {
+                $(this).css('display', 'none');
+            } else {
+                $(this).css({ 'min-width': avg + 'px', 'max-width': avg + 'px', width: avg + 'px', display: '' });
+            }
         });
     }
 
@@ -182,6 +197,7 @@ window.tableRuler = (function () {
             let ib = 0;
             $segs.each(function (i) {
                 const rect = this.getBoundingClientRect();
+                if (rect.height === 0) return; // hidden segment (sp-hidden / collapsed row)
                 if (mv.clientY > rect.top + rect.height / 2) ib = i + 1;
             });
             if (ib > n) ib = n;
@@ -217,6 +233,7 @@ window.tableRuler = (function () {
             let ib = 0;
             $segs.each(function (i) {
                 const rect = this.getBoundingClientRect();
+                if (rect.width === 0) return; // hidden segment (sp-hidden column)
                 if (mv.clientX > rect.left + rect.width / 2) ib = i + 1;
             });
             if (ib > n) ib = n;

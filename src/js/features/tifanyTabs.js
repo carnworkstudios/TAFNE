@@ -66,5 +66,12 @@ function initSpSelectors() {
 
         table.find('[class*="sp-"]').removeClass('active');
         table.find(`.sp-${spValue}`).addClass('active');
+
+        // Column visibility changed — rebuild the ruler so hidden columns'
+        // segments hide with them and widths resync to the new layout.
+        const tbl = table[0];
+        if (tbl && typeof window.renderTableRulers === 'function') {
+            requestAnimationFrame(() => window.renderTableRulers(tbl));
+        }
     });
 }

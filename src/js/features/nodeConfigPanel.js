@@ -5,6 +5,7 @@
 window.nodeConfigPanel = (function () {
 
     let _currentNodeId = null;
+    let _excludedCols  = new Set();   // column labels deselected in the schema preview
 
     // ── Public ─────────────────────────────────────────────────────────────────
 
@@ -13,6 +14,7 @@ window.nodeConfigPanel = (function () {
         if (!node) return;
 
         _currentNodeId = nodeId;
+        _excludedCols  = new Set(node.config?.excludedCols || []);
         const panel = _getPanel();
 
         _render(panel, node);
@@ -64,6 +66,15 @@ window.nodeConfigPanel = (function () {
         const renderer  = renderers[node.nodeType];
         if (renderer) renderer(body, node);
         else body.innerHTML = '<p style="color:var(--t-text-muted);padding:12px;">No configuration for this node type.</p>';
+
+        // Output schema preview — shows the resulting column list before RUN,
+        // recomputed live as the config controls change.
+        const preview = document.createElement('div');
+        preview.className = 'ne-config-field ne-schema-preview';
+        body.appendChild(preview);
+        _updateSchemaPreview(body, node);
+        body.addEventListener('change', () => _updateSchemaPreview(body, node));
+        body.addEventListener('input',  () => _updateSchemaPreview(body, node));
 
         panel.querySelector('#neConfigSave').addEventListener('click', () => _save(node));
     }
@@ -317,12 +328,79 @@ window.nodeConfigPanel = (function () {
                 break;
         }
 
+        // Persist chip selection from the schema preview
+        node.config = node.config || {};
+        node.config.excludedCols = [..._excludedCols];
+
         if (typeof renderNodeDom === 'function') renderNodeDom(node.id);
         window.nodeCanvasRenderer.markStaticDirty();
         if (typeof window.saveNodeEditorState === 'function') window.saveNodeEditorState();
 
         close();
         $.toast({ heading: 'Node Editor', text: 'Configuration saved', icon: 'success', loader: false, stack: false, hideAfter: 1800 });
+    }
+
+    // ── Output schema preview ──────────────────────────────────────────────────
+    // Predicts the node's output column list from its inputs + the LIVE values
+    // of the config controls (falling back to node.config where no control exists).
+
+    function _updateSchemaPreview(body, node) {
+        const box = body.querySelector('.ne-schema-preview');
+        if (!box) return;
+        const val = id => { const el = body.querySelector('#' + id); return el ? el.value : null; };
+
+        const inLabels = _getInputPortOptions(node).map(p => p.label);
+        let cols = null, note = '';
+
+        switch (node.nodeType) {
+            case 'filter':
+                cols = inLabels;
+                note = 'Same columns, fewer rows.';
+                break;
+            case 'vlookup':
+                cols = [...inLabels, (val('cfgVlOutputLabel') || node.config?.outputLabel || 'Lookup Result')];
+                break;
+            case 'formula':
+                cols = [...inLabels, (val('cfgFormulaOutputLabel') || node.config?.outputLabel || 'Result')];
+                break;
+            case 'join': {
+                const left  = (_getJoinSourceCols(node, 'join-in-left')  || []).map(c => c.label);
+                const right = (_getJoinSourceCols(node, 'join-in-right') || []).map(c => c.label);
+                const mode  = val('cfgJoinMode') || node.config?.mode || 'stack';
+                if (mode === 'stack') {
+                    cols = [...new Set([...left, ...right])];
+                } else if (mode === 'lateral') {
+                    cols = [...left, ...right];
+                } else {
+                    const leftSet = new Set(left);
+                    cols = [...left, ...right.map(l => leftSet.has(l) ? l + ' (right)' : l)];
+                }
+                break;
+            }
+            case 'api':
+                note = 'Columns are determined by the API response at run time.';
+                break;
+        }
+
+        if (!cols && !note) { box.innerHTML = ''; return; }
+        box.innerHTML = `
+            <label>Output columns <span class="ne-config-hint-inline">(click to include/exclude)</span></label>
+            ${cols && cols.length
+                ? `<div class="ne-schema-cols">${cols.map(l =>
+                      `<span class="ne-schema-col${_excludedCols.has(l) ? ' ne-schema-col-off' : ''}" data-col-label="${_esc(l)}">${_esc(l)}</span>`
+                  ).join('')}</div>`
+                : (cols ? '<div class="ne-config-hint">No input columns connected yet.</div>' : '')}
+            ${note ? `<div class="ne-config-hint">${note}</div>` : ''}`;
+
+        // Click a chip to toggle the column in/out of this node's output
+        box.querySelectorAll('.ne-schema-col').forEach(chip => {
+            chip.addEventListener('click', function () {
+                const label = this.dataset.colLabel;
+                if (_excludedCols.has(label)) _excludedCols.delete(label);
+                else                          _excludedCols.add(label);
+                this.classList.toggle('ne-schema-col-off');
+            });
+        });
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

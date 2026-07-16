@@ -88,6 +88,10 @@ window.nodeExecutor = (function () {
     function _writeOutput(node, outputCols) {
         const csm = window.cellStoreManager;
 
+        // Drop columns the user deselected in the config panel's schema preview
+        const excluded = new Set(node.config?.excludedCols || []);
+        if (excluded.size) outputCols = outputCols.filter(c => !excluded.has(c.label));
+
         // Release any old CellStore refs (only source/table headers use cellIds)
         node.headers.forEach(h => {
             if (h.cellIds && h.cellIds.length > 0) {
@@ -167,8 +171,12 @@ window.nodeExecutor = (function () {
         const refValHeader = refNode.headers.find(h => h.portId === cfg.refValuePort);
         if (!refKeyHeader || !refValHeader) throw new Error('VLookup: reference columns not found');
 
-        const refKeys   = refKeyHeader.cellIds.map(id => { const c = csm.get(id); return c ? c.value : ''; });
-        const refValues = refValHeader.cellIds.map(id => { const c = csm.get(id); return c ? c.value : ''; });
+        // Columnar path (reference node is an operator output) or CellStore path (table node)
+        const _headerVals = h => h.values
+            ? h.values
+            : (h.cellIds || []).map(id => { const c = csm.get(id); return c ? c.value : ''; });
+        const refKeys   = _headerVals(refKeyHeader);
+        const refValues = _headerVals(refValHeader);
 
         // Build lookup map
         const lookupMap = {};
@@ -406,6 +414,10 @@ window.nodeExecutor = (function () {
     // Write join output — keeps structural 'in' ports, replaces previous 'out' columns
     function _writeJoinOutput(node, outputCols) {
         const csm = window.cellStoreManager;
+
+        // Drop columns the user deselected in the config panel's schema preview
+        const excluded = new Set(node.config?.excludedCols || []);
+        if (excluded.size) outputCols = outputCols.filter(c => !excluded.has(c.label));
         // Release any previous output-only CellStore refs
         node.headers
             .filter(h => h.direction === 'out')
