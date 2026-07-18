@@ -137,6 +137,8 @@ $(function () {
                 }
                 // Any direct cell interaction scopes the element type to cell
                 $('#elementType').val('cell');
+                if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
+                if (typeof window.populateStylesPanel === 'function') window.populateStylesPanel();
             }
         });
 
@@ -160,6 +162,8 @@ $(function () {
                 // Drag-select always scopes to cell granularity
                 $('#elementType').val('cell');
                 // (Draw mode operates via the Draw Canvas panel, not via cell selection)
+                if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
+                if (typeof window.populateStylesPanel === 'function') window.populateStylesPanel();
             }
         });
 

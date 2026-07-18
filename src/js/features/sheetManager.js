@@ -67,6 +67,27 @@ function loadNetlistAsSheets(netlist) {
 window.loadNetlistAsSheets = loadNetlistAsSheets;
 
 /**
+ * Build sheets from a generic gx-tables-v1 payload (Schema Editor BOM/findings,
+ * or any tool sending [{ name, rows: [{col: val}] }] tables over CwsBridge).
+ */
+function loadTablesAsSheets(payload) {
+    var tables = (payload && payload.tables) || [];
+    var added = 0;
+    tables.forEach(function (t) {
+        if (!Array.isArray(t.rows) || !t.rows.length) return;
+        addSheet(t.name || ('Table ' + (window._sheetCounter + 1)),
+            parseJsonInput(JSON.stringify(t.rows)));
+        added++;
+    });
+    $.toast({
+        heading: (payload && payload.meta && payload.meta.title) || 'Tables received',
+        text: added + ' sheet' + (added === 1 ? '' : 's') + ' added',
+        icon: added ? 'success' : 'warning', loader: false, stack: false,
+    });
+}
+window.loadTablesAsSheets = loadTablesAsSheets;
+
+/**
  * Build sheets from a ginexys-diagram-v2 (or v1) payload received over CwsBridge.
  * v2 sheets: Components, Wires, Connections, Connectors, BOM, Hierarchy.
  * v1 falls back gracefully (no BOM/Hierarchy, no layer/path columns).

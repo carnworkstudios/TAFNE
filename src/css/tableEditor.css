@@ -789,3 +789,162 @@ tr.accordion-header.actives > td {
 .tafne-ruler-wrap.ruler-dup-mode .ruler-insert-pill {
     background: var(--t-warning, #f59e0b);
 }
+
+/* ============================ SELECTION HANDLES (move / merge / fill) ============================ */
+/* Body-level, fixed overlay tracking the selection bbox. Interior is click-through so cell editing
+   still works; only the border edges and the node handles capture the mouse. */
+.tf-sel-overlay {
+    position: fixed;
+    z-index: 9000;
+    pointer-events: none;               /* interior passes clicks through to cells */
+    box-sizing: border-box;
+    outline: 2px solid var(--t-primary, #1c835a);
+    outline-offset: -1px;
+}
+/* While a gesture is in flight the whole overlay ignores the pointer so elementFromPoint()
+   resolves to the cell underneath. */
+.tf-sel-overlay.tf-gesturing { pointer-events: none; }
+
+/* Border hit-frame — four thin strips that trigger MOVE. */
+.tf-sel-edge {
+    position: absolute;
+    pointer-events: auto;
+    cursor: move;
+}
+.tf-sel-edge-top    { top: -3px;    left: 0;      right: 0;     height: 7px; }
+.tf-sel-edge-bottom { bottom: -3px; left: 0;      right: 0;     height: 7px; }
+.tf-sel-edge-left   { top: 0;       bottom: 0;    left: -3px;   width: 7px;  }
+.tf-sel-edge-right  { top: 0;       bottom: 0;    right: -3px;  width: 7px;  }
+.tf-sel-overlay.tf-gesturing .tf-sel-edge { pointer-events: none; }
+
+/* Edge mid-nodes — round handles that trigger MERGE-on-drag. */
+.tf-sel-node {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    margin: -6px 0 0 -6px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--t-primary, #1c835a);
+    pointer-events: auto;
+    z-index: 2;
+}
+.tf-sel-node-top    { top: 0;    left: 50%; cursor: ns-resize; }
+.tf-sel-node-bottom { top: 100%; left: 50%; cursor: ns-resize; }
+.tf-sel-node-left   { top: 50%;  left: 0;   cursor: ew-resize; }
+.tf-sel-node-right  { top: 50%;  left: 100%; cursor: ew-resize; }
+.tf-sel-overlay.tf-gesturing .tf-sel-node { pointer-events: none; }
+
+/* Corner fill handle — square, bottom-right, triggers FILL/duplicate. */
+.tf-sel-fill {
+    position: absolute;
+    right: -5px;
+    bottom: -5px;
+    width: 10px;
+    height: 10px;
+    background: var(--t-primary, #1c835a);
+    border: 1.5px solid #fff;
+    cursor: crosshair;
+    pointer-events: auto;
+    z-index: 3;
+}
+.tf-sel-overlay.tf-gesturing .tf-sel-fill { pointer-events: none; }
+
+/* Suppress native text selection during a handle gesture. */
+body.tf-no-select { user-select: none; -webkit-user-select: none; }
+
+/* ============================ CLASS PILLS (Styles & ID panel) ============================ */
+/* Single-row, horizontally-scrolling strip so a long class list never grows the panel. */
+.tf-class-pills {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    min-height: 0;
+    margin-bottom: 4px;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+}
+.tf-class-pills:empty { display: none; }
+.tf-class-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: 0 0 auto;
+    max-width: 140px;
+    padding: 1px 4px 1px 8px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #fff;
+    background: var(--t-primary, #1c835a);
+    border-radius: 9999px;
+    white-space: nowrap;
+}
+.tf-class-pill > :first-child,
+.tf-class-pill { overflow: hidden; text-overflow: ellipsis; }
+.tf-class-pill-x {
+    flex: 0 0 auto;
+    cursor: pointer;
+    font-weight: bold;
+    line-height: 1;
+    padding: 0 2px;
+    opacity: 0.85;
+}
+.tf-class-pill-x:hover { opacity: 1; }
+
+/* Quick-access "Add Table" icon button in the center header */
+.center-newtable-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    font-size: 16px;
+    color: #fff;
+    background: var(--t-primary, #1c835a);
+    border: 1px solid var(--t-primary, #1c835a);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+.center-newtable-btn:hover { filter: brightness(1.08); }
+.center-newtable-btn:active { filter: brightness(0.94); }
+.center-newtable-btn svg { display: block; }
+
+/* ============================ NEW-TABLE GRID PICKER ============================ */
+.tf-newtable-pop {
+    position: fixed;
+    z-index: 9500;
+    background: var(--t-bg-surface, #fff);
+    border: 1px solid var(--t-border, #d0d7de);
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.tf-newtable-pop .tf-grid {
+    display: grid;
+    gap: 2px;
+}
+.tf-newtable-pop .tf-grid-cell {
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--t-border, #d0d7de);
+    box-sizing: border-box;
+    background: var(--t-bg-workspace, #f6f8fa);
+}
+.tf-newtable-pop .tf-grid-cell.on {
+    background: var(--t-primary, #1c835a);
+    border-color: var(--t-primary, #1c835a);
+}
+.tf-newtable-pop .tf-grid-label {
+    margin-top: 6px;
+    text-align: center;
+    font-size: 11px;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    color: var(--t-text-muted, #57606a);
+}

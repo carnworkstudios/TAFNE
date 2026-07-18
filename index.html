@@ -279,7 +279,10 @@
     <script src="src/js/components/nodeTypes.js"></script>
     <!-- TAFNE Features -->
     <script src="src/js/features/applyClassID.js"></script>
+    <script src="src/js/features/classPanel.js"></script>
     <script src="src/js/features/dragDrop.js"></script>
+    <script src="src/js/features/cellHandles.js"></script>
+    <script src="src/js/features/newTable.js"></script>
     <script src="src/js/features/generateFunctions.js"></script>
     <script src="src/js/features/parseInputs.js"></script>
     <script src="src/js/features/tableManipulation.js"></script>
@@ -584,6 +587,8 @@
           </div>
           <div class="form-group mb-2">
             <label for="classInput" style="font-size: 11px">Class Name</label>
+            <!-- Existing classes on the selected element, as removable pills -->
+            <div class="tf-class-pills" id="classPills"></div>
             <div class="input-group input-group-sm">
               <div class="input-group-prepend">
                 <button class="input-group-text sp-class" id="basic-addon1">
@@ -594,7 +599,7 @@
                 type="text"
                 class="form-control"
                 id="classInput"
-                placeholder="class name"
+                placeholder="add class + Enter"
               />
             </div>
           </div>
@@ -1144,6 +1149,18 @@
                 style="width: 48px"
               />
             </label>
+
+            <div class="input-toolbar-divider"></div>
+
+            <!-- Draw a new table onto the current sheet -->
+            <button
+              type="button"
+              class="newTableBtn center-newtable-btn"
+              aria-label="Add table"
+              title="Add table — drag to size, then draw it onto this sheet"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 18h2v-3h3v-2h-3v-3h-2v3H8v2h3zm-5 4q-.825 0-1.412-.587T4 20V4q0-.825.588-1.412T6 2h8l6 6v12q0 .825-.587 1.413T18 22zm7-13V4H6v16h12V9zM6 4v5zv16z"></path></svg>
+            </button>
           </div>
 
           <span class="center-pos" id="tablePosition">Pos · 1:1</span>
@@ -2148,6 +2165,21 @@
         // Flow 1 receive: Schema Editor → TAFNE (load-diagram / load-netlist)
         CwsBridge.onData(async function (envelope) {
           var action = envelope?.hints?.action;
+          if (action === "load-tables") {
+            try {
+              var traw = envelope.pointer
+                ? await CwsBridge.getStore(envelope.pointer)
+                : envelope.inline;
+              var tdata = JSON.parse(traw);
+              if (tdata.schema === "gx-tables-v1" && typeof loadTablesAsSheets === "function") {
+                loadTablesAsSheets(tdata);
+              }
+            } catch (e) {
+              $.toast({ heading: "TAFNE", text: "Failed to load tables: " + e.message,
+                icon: "error", loader: false, stack: false });
+            }
+            return;
+          }
           if (action !== "load-diagram" && action !== "load-netlist") return;
           var raw;
           try {

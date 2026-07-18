@@ -1,0 +1,458 @@
+// ====================================== CELL SELECTION HANDLES ======================================
+// Numbers-style direct manipulation for a rectangular cell selection.
+//
+//   • Drag the selection BORDER            → move the whole block (multi-cell), overwriting the target.
+//   • Drag an EDGE node (○ mid-edge)       → extend the selection and MERGE the covered cells.
+//   • Drag the CORNER node (◪ bottom-right)→ FILL/duplicate the block's content into the swept cells.
+//
+// The overlay is a single body-level, position:fixed element that tracks the selection's bounding box
+// in viewport coordinates. Its interior is pointer-events:none so normal cell editing still works;
+// only the border hit-frame and the handles capture the mouse.
+(function () {
+    const OVERLAY_ID = 'tfSelHandles';
+    let $overlay = null;
+    let gestureActive = false;
+
+    // ── Geometry helpers ──────────────────────────────────────────────────────
+    function activeTable() {
+        return window.currentTable || null;
+    }
+
+    // Rectangular bounds of the current selection in visual grid coordinates.
+    // Returns null when there is no usable selection.
+    function getSelectionBox() {
+        const table = activeTable();
+        const cells = window.selectedCells || [];
+        if (!table || cells.length === 0) return null;
+
+        const mapper = new window.VisualGridMapper(table);
+        let minR = Infinity, minC = Infinity, maxR = -Infinity, maxC = -Infinity;
+        let hasSpan = false;
+
+        cells.forEach(cell => {
+            const p = mapper.getVisualPosition(cell);
+            if (!p) return;
+            if (p.rowspan > 1 || p.colspan > 1) hasSpan = true;
+            minR = Math.min(minR, p.startRow);
+            minC = Math.min(minC, p.startCol);
+            maxR = Math.max(maxR, p.startRow + p.rowspan - 1);
+            maxC = Math.max(maxC, p.startCol + p.colspan - 1);
+        });
+
+        if (!isFinite(minR)) return null;
+        return { minR, minC, maxR, maxC, mapper, hasSpan };
+    }
+
+    // Viewport bounding rect that encloses grid cells [r0..r1]×[c0..c1].
+    function boundsForRegion(mapper, r0, c0, r1, c1) {
+        let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+        for (let r = r0; r <= r1; r++) {
+            for (let c = c0; c <= c1; c++) {
+                const gc = mapper.grid[r] && mapper.grid[r][c];
+                if (!gc) continue;
+                const rect = gc.element.getBoundingClientRect();
+                left = Math.min(left, rect.left);
+                top = Math.min(top, rect.top);
+                right = Math.max(right, rect.right);
+                bottom = Math.max(bottom, rect.bottom);
+            }
+        }
+        if (!isFinite(left)) return null;
+        return { left, top, width: right - left, height: bottom - top };
+    }
+
+    // Cell (td/th) currently under the pointer, if any, restricted to the active table.
+    function cellUnderPoint(x, y) {
+        const el = document.elementFromPoint(x, y);
+        if (!el) return null;
+        const cell = el.closest ? el.closest('td, th') : null;
+        if (!cell) return null;
+        if (cell.closest('table') !== activeTable()) return null;
+        if (cell.classList.contains('drag-handle')) return null;
+        return cell;
+    }
+
+    // ── Overlay construction / positioning ────────────────────────────────────
+    function ensureOverlay() {
+        if ($overlay && $overlay.length && document.body.contains($overlay[0])) return $overlay;
+        $overlay = $(
+            '<div id="' + OVERLAY_ID + '" class="tf-sel-overlay" style="display:none;">' +
+                '<div class="tf-sel-edge tf-sel-edge-top"></div>' +
+                '<div class="tf-sel-edge tf-sel-edge-right"></div>' +
+                '<div class="tf-sel-edge tf-sel-edge-bottom"></div>' +
+                '<div class="tf-sel-edge tf-sel-edge-left"></div>' +
+                '<div class="tf-sel-node tf-sel-node-top"    data-edge="top"></div>' +
+                '<div class="tf-sel-node tf-sel-node-right"  data-edge="right"></div>' +
+                '<div class="tf-sel-node tf-sel-node-bottom" data-edge="bottom"></div>' +
+                '<div class="tf-sel-node tf-sel-node-left"   data-edge="left"></div>' +
+                '<div class="tf-sel-fill" title="Drag to fill / duplicate"></div>' +
+            '</div>'
+        );
+        $('body').append($overlay);
+        wireGestures();
+        return $overlay;
+    }
+
+    // Recompute the overlay box from the live selection. Safe to call often.
+    function updateSelectionHandles() {
+        if (gestureActive) return; // don't fight an in-flight drag
+        const box = getSelectionBox();
+        if (!box) { hideHandles(); return; }
+
+        ensureOverlay();
+        const rect = boundsForRegion(box.mapper, box.minR, box.minC, box.maxR, box.maxC);
+        if (!rect) { hideHandles(); return; }
+
+        $overlay.css({
+            left: rect.left + 'px',
+            top: rect.top + 'px',
+            width: rect.width + 'px',
+            height: rect.height + 'px',
+            display: 'block'
+        });
+    }
+
+    function hideHandles() {
+        if ($overlay) $overlay.hide();
+    }
+
+    // ── Live preview highlight (reuses .selected-cell styling) ────────────────
+    function highlightRegion(mapper, r0, c0, r1, c1) {
+        const table = activeTable();
+        $(table).find('.selected-cell').removeClass('selected-cell');
+        window.selectedCells = [];
+        const clampR1 = Math.min(r1, mapper.maxRows - 1);
+        const clampC1 = Math.min(c1, mapper.maxCols - 1);
+        for (let r = r0; r <= clampR1; r++) {
+            for (let c = c0; c <= clampC1; c++) {
+                const gc = mapper.grid[r] && mapper.grid[r][c];
+                if (gc && gc.isOrigin) {
+                    $(gc.element).addClass('selected-cell');
+                    if (!window.selectedCells.includes(gc.element)) window.selectedCells.push(gc.element);
+                }
+            }
+        }
+    }
+
+    // ── Data operations ───────────────────────────────────────────────────────
+
+    // Read the html content of the source region into a 2D array [rows][cols].
+    function readRegion(mapper, r0, c0, r1, c1) {
+        const out = [];
+        for (let r = r0; r <= r1; r++) {
+            const line = [];
+            for (let c = c0; c <= c1; c++) {
+                const gc = mapper.grid[r] && mapper.grid[r][c];
+                line.push(gc && gc.isOrigin ? $(gc.element).html() : '');
+            }
+            out.push(line);
+        }
+        return out;
+    }
+
+    // Move the block so its top-left lands at (destR, destC). Source cells are cleared;
+    // destination cells are overwritten. No structural change, so the mapper stays valid.
+    function applyMove(box, destR, destC) {
+        const { mapper, minR, minC, maxR, maxC } = box;
+        const rows = maxR - minR;
+        const cols = maxC - minC;
+
+        // Clamp destination into the grid.
+        destR = Math.max(0, Math.min(destR, mapper.maxRows - 1 - rows));
+        destC = Math.max(0, Math.min(destC, mapper.maxCols - 1 - cols));
+        if (destR === minR && destC === minC) return false;
+
+        // Every destination cell must be a real, unspanned origin cell.
+        for (let r = 0; r <= rows; r++) {
+            for (let c = 0; c <= cols; c++) {
+                const gc = mapper.grid[destR + r] && mapper.grid[destR + r][destC + c];
+                if (!gc || !gc.isOrigin) return false;
+                const p = mapper.getVisualPosition(gc.element);
+                if (p.rowspan > 1 || p.colspan > 1) return false;
+            }
+        }
+
+        window.saveCurrentState();
+        const content = readRegion(mapper, minR, minC, maxR, maxC);
+
+        // Clear source first (so overlapping moves don't smear).
+        for (let r = minR; r <= maxR; r++) {
+            for (let c = minC; c <= maxC; c++) {
+                const gc = mapper.grid[r][c];
+                if (gc && gc.isOrigin) $(gc.element).empty();
+            }
+        }
+        // Write into destination.
+        for (let r = 0; r <= rows; r++) {
+            for (let c = 0; c <= cols; c++) {
+                const gc = mapper.grid[destR + r][destC + c];
+                $(gc.element).html(content[r][c]);
+            }
+        }
+
+        // Reselect the moved block.
+        const table = activeTable();
+        $(table).find('.selected-cell').removeClass('selected-cell');
+        window.selectedCells = [];
+        for (let r = 0; r <= rows; r++) {
+            for (let c = 0; c <= cols; c++) {
+                const el = mapper.grid[destR + r][destC + c].element;
+                $(el).addClass('selected-cell');
+                window.selectedCells.push(el);
+            }
+        }
+        window.saveCurrentState();
+        return true;
+    }
+
+    // Tile the source block's content into the extended region [minR..er]×[minC..ec].
+    function applyFill(box, er, ec) {
+        const { mapper, minR, minC, maxR, maxC } = box;
+        er = Math.min(Math.max(er, maxR), mapper.maxRows - 1);
+        ec = Math.min(Math.max(ec, maxC), mapper.maxCols - 1);
+        if (er === maxR && ec === maxC) return false;
+
+        const srcRows = maxR - minR + 1;
+        const srcCols = maxC - minC + 1;
+        const content = readRegion(mapper, minR, minC, maxR, maxC);
+
+        // Validate the extension cells are unspanned origins.
+        for (let r = minR; r <= er; r++) {
+            for (let c = minC; c <= ec; c++) {
+                if (r <= maxR && c <= maxC) continue; // inside source, untouched
+                const gc = mapper.grid[r] && mapper.grid[r][c];
+                if (!gc || !gc.isOrigin) return false;
+                const p = mapper.getVisualPosition(gc.element);
+                if (p.rowspan > 1 || p.colspan > 1) return false;
+            }
+        }
+
+        window.saveCurrentState();
+        for (let r = minR; r <= er; r++) {
+            for (let c = minC; c <= ec; c++) {
+                if (r <= maxR && c <= maxC) continue;
+                const gc = mapper.grid[r][c];
+                const src = content[(r - minR) % srcRows][(c - minC) % srcCols];
+                $(gc.element).html(src);
+            }
+        }
+
+        highlightRegion(mapper, minR, minC, er, ec);
+        window.saveCurrentState();
+        return true;
+    }
+
+    function setSpanAttr(el, attr, val) {
+        if (val > 1) el.setAttribute(attr, val);
+        else el.removeAttribute(attr);
+    }
+
+    // Grow the anchor cell's span so it covers the rectangle [r0..r1]×[c0..c1]. Only ever grows
+    // (the target is clamped to include the anchor's current extent), so a drag never destroys the
+    // anchor. Absorbed neighbours must be plain 1×1 cells; they are removed. For a top/left stretch
+    // the anchor's origin moves up/left; for top the <td> is relocated into the new top row.
+    function applySpanGrow(aBase, r0, c0, r1, c1) {
+        const table = activeTable();
+        if (!table) return false;
+        const m = new window.VisualGridMapper(table);
+        const anchor = aBase.el;
+        const p = m.getVisualPosition(anchor);
+        if (!p) return false;
+
+        const ar0 = p.startRow, ac0 = p.startCol;
+        const ar1 = ar0 + p.rowspan - 1, ac1 = ac0 + p.colspan - 1;
+
+        // Grow-only + clamp into the grid.
+        r0 = Math.max(0, Math.min(r0, ar0));
+        c0 = Math.max(0, Math.min(c0, ac0));
+        r1 = Math.min(m.maxRows - 1, Math.max(r1, ar1));
+        c1 = Math.min(m.maxCols - 1, Math.max(c1, ac1));
+        if (r0 === ar0 && c0 === ac0 && r1 === ar1 && c1 === ac1) return false;
+
+        // Validate + collect the cells to absorb (everything in the target rect that isn't the anchor).
+        const toRemove = new Set();
+        for (let r = r0; r <= r1; r++) {
+            for (let c = c0; c <= c1; c++) {
+                if (r >= ar0 && r <= ar1 && c >= ac0 && c <= ac1) continue; // anchor's own area
+                const gc = m.grid[r] && m.grid[r][c];
+                if (!gc || !gc.isOrigin) {
+                    $.toast({ heading: 'Info', text: 'Can only stretch over plain, unmerged cells.', icon: 'warning', loader: false, stack: false });
+                    return false;
+                }
+                const pp = m.getVisualPosition(gc.element);
+                if (pp.rowspan > 1 || pp.colspan > 1) {
+                    $.toast({ heading: 'Info', text: 'Can only stretch over plain, unmerged cells.', icon: 'warning', loader: false, stack: false });
+                    return false;
+                }
+                toRemove.add(gc.element);
+            }
+        }
+
+        window.saveCurrentState();
+
+        const movesUp = r0 < ar0; // top stretch relocates the anchor into row r0
+        toRemove.forEach(el => el.remove());
+
+        // Relocate the anchor <td> into the new top row before applying the taller rowspan,
+        // so it lives in its top-left cell as required by HTML table semantics.
+        if (movesUp) {
+            const m2 = new window.VisualGridMapper(table);
+            const $targetTr = $(table).find('tr').eq(r0);
+            let ref = null;
+            $targetTr.children('td, th').each(function () {
+                if (this === anchor) return;
+                const pos = m2.getVisualPosition(this);
+                if (pos && pos.startCol >= c0) { ref = this; return false; }
+            });
+            if (ref) $(ref).before(anchor);
+            else $targetTr.append(anchor);
+        }
+
+        setSpanAttr(anchor, 'colspan', c1 - c0 + 1);
+        setSpanAttr(anchor, 'rowspan', r1 - r0 + 1);
+
+        // Reselect just the stretched cell.
+        $(table).find('.selected-cell').removeClass('selected-cell');
+        window.selectedCells = [anchor];
+        $(anchor).addClass('selected-cell');
+        window.saveCurrentState();
+        return true;
+    }
+
+    // ── Gesture wiring ────────────────────────────────────────────────────────
+    function beginGesture(kind, ev, edge) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const box = getSelectionBox();
+        if (!box) return;
+
+        if ((kind === 'move' || kind === 'fill') && box.hasSpan) {
+            $.toast({ heading: 'Info', text: 'Unmerge the selection before you move or fill it.', icon: 'warning', loader: false, stack: false });
+            return;
+        }
+
+        // For span-stretch, operate on the single anchor cell (top-left origin of the selection)
+        // and remember its current extent so we only ever grow one boundary toward the drag.
+        let aBase = null;
+        if (kind === 'span') {
+            const anchorEl = box.mapper.grid[box.minR] && box.mapper.grid[box.minR][box.minC] && box.mapper.grid[box.minR][box.minC].element;
+            const p = anchorEl && box.mapper.getVisualPosition(anchorEl);
+            if (!p) return;
+            aBase = { el: anchorEl, r0: p.startRow, c0: p.startCol, r1: p.startRow + p.rowspan - 1, c1: p.startCol + p.colspan - 1 };
+        }
+
+        gestureActive = true;
+        $overlay.addClass('tf-gesturing');           // interior pointer-events:none during drag
+        $('body').addClass('tf-no-select');
+
+        const startCell = cellUnderPoint(ev.clientX, ev.clientY);
+        const refPos = startCell ? box.mapper.getVisualPosition(startCell) : null;
+        let lastKey = '';
+
+        function onMove(mv) {
+            const cur = cellUnderPoint(mv.clientX, mv.clientY);
+            if (!cur) return;
+            const p = box.mapper.getVisualPosition(cur);
+            if (!p) return;
+
+            if (kind === 'move') {
+                const dr = refPos ? p.startRow - refPos.startRow : p.startRow - box.minR;
+                const dc = refPos ? p.startCol - refPos.startCol : p.startCol - box.minC;
+                let destR = box.minR + dr, destC = box.minC + dc;
+                destR = Math.max(0, Math.min(destR, box.mapper.maxRows - 1 - (box.maxR - box.minR)));
+                destC = Math.max(0, Math.min(destC, box.mapper.maxCols - 1 - (box.maxC - box.minC)));
+                const key = destR + ':' + destC;
+                if (key === lastKey) return;
+                lastKey = key;
+                const rect = boundsForRegion(box.mapper, destR, destC,
+                    destR + (box.maxR - box.minR), destC + (box.maxC - box.minC));
+                if (rect) $overlay.css({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+            } else if (kind === 'fill') {
+                const er = Math.max(box.maxR, p.startRow);
+                const ec = Math.max(box.maxC, p.startCol);
+                const key = er + ':' + ec;
+                if (key === lastKey) return;
+                lastKey = key;
+                const rect = boundsForRegion(box.mapper, box.minR, box.minC, er, ec);
+                if (rect) $overlay.css({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+                $overlay[0].dataset.fillR = er;
+                $overlay[0].dataset.fillC = ec;
+            } else if (kind === 'span') {
+                // Grow exactly one boundary of the anchor cell toward the cursor.
+                let sr = aBase.r0, sc = aBase.c0, er = aBase.r1, ec = aBase.c1;
+                if (edge === 'right')  ec = Math.max(aBase.c1, p.startCol + p.colspan - 1);
+                if (edge === 'left')   sc = Math.min(aBase.c0, p.startCol);
+                if (edge === 'bottom') er = Math.max(aBase.r1, p.startRow + p.rowspan - 1);
+                if (edge === 'top')    sr = Math.min(aBase.r0, p.startRow);
+                const key = sr + ':' + sc + ':' + er + ':' + ec;
+                if (key === lastKey) return;
+                lastKey = key;
+                highlightRegion(box.mapper, sr, sc, er, ec);
+                const rect = boundsForRegion(box.mapper, sr, sc, er, ec);
+                if (rect) $overlay.css({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+                $overlay[0].dataset.spSr = sr; $overlay[0].dataset.spSc = sc;
+                $overlay[0].dataset.spEr = er; $overlay[0].dataset.spEc = ec;
+            }
+        }
+
+        function onUp(up) {
+            $(document).off('mousemove.tfhandle mouseup.tfhandle');
+            gestureActive = false;
+            $overlay.removeClass('tf-gesturing');
+            $('body').removeClass('tf-no-select');
+
+            const cur = cellUnderPoint(up.clientX, up.clientY);
+            if (kind === 'move' && cur) {
+                const p = box.mapper.getVisualPosition(cur);
+                if (p) {
+                    const dr = refPos ? p.startRow - refPos.startRow : p.startRow - box.minR;
+                    const dc = refPos ? p.startCol - refPos.startCol : p.startCol - box.minC;
+                    applyMove(box, box.minR + dr, box.minC + dc);
+                }
+            } else if (kind === 'fill') {
+                const er = parseInt($overlay[0].dataset.fillR, 10);
+                const ec = parseInt($overlay[0].dataset.fillC, 10);
+                if (!isNaN(er) && !isNaN(ec)) applyFill(box, er, ec);
+            } else if (kind === 'span') {
+                const sr = parseInt($overlay[0].dataset.spSr, 10);
+                const sc = parseInt($overlay[0].dataset.spSc, 10);
+                const er = parseInt($overlay[0].dataset.spEr, 10);
+                const ec = parseInt($overlay[0].dataset.spEc, 10);
+                if (![sr, sc, er, ec].some(isNaN)) applySpanGrow(aBase, sr, sc, er, ec);
+            }
+
+            delete $overlay[0].dataset.fillR; delete $overlay[0].dataset.fillC;
+            delete $overlay[0].dataset.spSr; delete $overlay[0].dataset.spSc;
+            delete $overlay[0].dataset.spEr; delete $overlay[0].dataset.spEc;
+
+            if (typeof window.renderTableRulers === 'function' && activeTable()) {
+                window.renderTableRulers(activeTable());
+            }
+            updateSelectionHandles();
+            if (typeof window.populateStylesPanel === 'function') window.populateStylesPanel();
+        }
+
+        $(document).on('mousemove.tfhandle', onMove).on('mouseup.tfhandle', onUp);
+    }
+
+    function wireGestures() {
+        // Border edges → move
+        $overlay.on('mousedown', '.tf-sel-edge', function (e) { beginGesture('move', e); });
+        // Edge nodes → stretch span (colspan/rowspan grows toward the drag)
+        $overlay.on('mousedown', '.tf-sel-node', function (e) { beginGesture('span', e, $(this).attr('data-edge')); });
+        // Corner → fill/duplicate
+        $overlay.on('mousedown', '.tf-sel-fill', function (e) { beginGesture('fill', e); });
+    }
+
+    // ── Reposition on scroll / resize ─────────────────────────────────────────
+    // Capture-phase scroll catches scrolling inside any container (e.g. .tafne-table-vp),
+    // not just the window.
+    window.addEventListener('resize', function () { if (!gestureActive) updateSelectionHandles(); });
+    document.addEventListener('scroll', function () { if (!gestureActive) updateSelectionHandles(); }, true);
+
+    window.updateSelectionHandles = updateSelectionHandles;
+    window.hideSelectionHandles = hideHandles;
+
+    // Internal seams exposed for unit tests; no effect on runtime behavior.
+    window.__cellHandlesInternals = { getSelectionBox, readRegion, applyMove, applyFill, applySpanGrow };
+})();

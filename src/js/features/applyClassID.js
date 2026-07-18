@@ -64,47 +64,42 @@ function applyClassId() {
     }
   }
 
-  // Apply to different element types
-  if (elementType === "cell") {
-    selectedCells.forEach((cell) => {
-      applyStylingToCell(cell);
-    });
-  } else if (elementType === "row") {
+  // Apply to whichever elements the Element Type selector targets
+  getStyleTargets(elementType).forEach(applyStylingToCell);
+
+  // Clear only the transient "add" fields; leave id/class/span reflecting the
+  // element's live state (repopulated below) instead of resetting to defaults.
+  $("#classInput").val("");
+  $("#styleInput").val("");
+  window.saveCurrentState();
+  if (typeof window.populateStylesPanel === "function") window.populateStylesPanel();
+}
+
+// Resolve the elements a style/class/attribute operation should target, based on
+// the Element Type selector. Shared by applyClassId and the reflection panel.
+function getStyleTargets(elementType) {
+  const cells = window.selectedCells || [];
+  if (!cells.length) return [];
+
+  if (elementType === "row") {
     const rows = new Set();
-    selectedCells.forEach((cell) => {
-      rows.add($(cell).closest("tr")[0]);
-    });
-
-    rows.forEach((row) => {
-      applyStylingToCell(row);
-    });
-  } else if (elementType === "column") {
-    const mapper = new VisualGridMapper($table);
-    const cols = new Set();
-
-    selectedCells.forEach((cell) => {
-      const position = mapper.getVisualPosition(cell);
-      if (position) {
-        cols.add(position.startCol);
-      }
-    });
-
-    cols.forEach((colIndex) => {
-      const cells = mapper.getCellsInColumn(colIndex);
-      cells.forEach((cell) => {
-        applyStylingToCell(cell);
-      });
-    });
+    cells.forEach((c) => { const tr = $(c).closest("tr")[0]; if (tr) rows.add(tr); });
+    return Array.from(rows);
   }
 
-  // Clear inputs after applying
-  $("#classInput").val("");
-  $("#idInput").val("");
-  $("#styleInput").val("");
-  $("#tableAttribute").val("");
-  $("#attributeValue").val("1");
-  window.saveCurrentState();
+  if (elementType === "column") {
+    const mapper = new VisualGridMapper($(window.currentTable));
+    const out = new Set();
+    cells.forEach((c) => {
+      const p = mapper.getVisualPosition(c);
+      if (p) mapper.getCellsInColumn(p.startCol).forEach((x) => out.add(x));
+    });
+    return Array.from(out);
+  }
+
+  return cells.slice();
 }
 
 // Make globally accessible
 window.applyClassId = applyClassId;
+window.getStyleTargets = getStyleTargets;
