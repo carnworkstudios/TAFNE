@@ -235,6 +235,7 @@
 
     <!-- OS Bridge (no-op when standalone, connects to kernel when in iframe) -->
     <script src="/assets/os/contracts.js"></script>
+    <script src="/assets/os/mcp.js"></script>
     <script src="/assets/os/bridge.js"></script>
 
     <!-- jQuery (must be before Bootstrap JS and TIFANY scripts) -->
@@ -299,6 +300,7 @@
     <script src="src/js/features/nodeExecutor.js"></script>
     <script src="src/js/features/nodeEditor.js"></script>
     <script src="src/js/core/engine.js"></script>
+    <script src="src/js/features/mcpRegister.js"></script>
 
     <!-- TAFNE CSS -->
     <link rel="stylesheet" href="src/css/tableEditor.css" />
@@ -2242,6 +2244,37 @@
               }
             } catch (e) {
               $.toast({ heading: "TAFNE", text: "Failed to load tables: " + e.message,
+                icon: "error", loader: false, stack: false });
+            }
+            return;
+          }
+          // Artifacts/tags handoff (gx-tags-v1). Thin data dispatcher: table-kind
+          // tags become sheets; other kinds are passed to the artifacts panel to
+          // surface. Routing/construction POLICY lives in the injected panel.
+          if (action === "load-tags" || action === "load-text") {
+            try {
+              var graw = envelope.pointer
+                ? await CwsBridge.getStore(envelope.pointer)
+                : envelope.inline;
+              var gdata = JSON.parse(graw);
+              if (gdata.schema === "gx-tags-v1" && Array.isArray(gdata.tags)) {
+                var tableTags = gdata.tags.filter(function (t) {
+                  return t.kind === "table" || t.artifact?.kind === "table";
+                });
+                if (tableTags.length && typeof loadTablesAsSheets === "function") {
+                  // Tags carry references, not grids; if the sender inlined rows,
+                  // load them, else create a placeholder sheet per table tag.
+                  var tbls = tableTags.map(function (t, i) {
+                    return { name: t.value || ("Table " + (i + 1)), rows: t.rows || t.artifact?.rows || [] };
+                  }).filter(function (t) { return t.rows.length; });
+                  if (tbls.length) loadTablesAsSheets({ schema: "gx-tables-v1", tables: tbls, meta: gdata.meta });
+                }
+                if (window.__GX_TAFNE_ARTIFACTS__) window.__GX_TAFNE_ARTIFACTS__.refresh();
+                $.toast({ heading: "TAFNE", text: "Received " + gdata.tags.length + " tag(s)",
+                  icon: "success", loader: false, stack: false });
+              }
+            } catch (e) {
+              $.toast({ heading: "TAFNE", text: "Failed to load tags: " + e.message,
                 icon: "error", loader: false, stack: false });
             }
             return;

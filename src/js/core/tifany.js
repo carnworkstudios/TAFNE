@@ -1241,10 +1241,28 @@ $(function () {
                 });
                 text = grid.map(function (r) { return r.join('\t'); }).join('\n');
             }
+            // Sheet list + active sheet + mode so the AI can resolve @Sheet and
+            // /mode references the user types in the prompt. Sheets already carry
+            // stable ids (sheet-N); dims are read from each sheet's html.
+            var sheets = (window.sheets || []).map(function (s) {
+                var dims = '';
+                try {
+                    var tmp = document.createElement('div');
+                    tmp.innerHTML = s.rawHtml || s.containerHtml || '';
+                    var t = tmp.querySelector('table');
+                    if (t) dims = t.rows.length + '×' + ((t.rows[0] && t.rows[0].cells.length) || 0);
+                } catch (_) { /* dims best-effort */ }
+                return { id: s.id, name: s.name, dims: dims };
+            });
+            var mode = window.labModeEnabled ? 'lab'
+                : window.nodeEditorEnabled ? 'node' : 'table';
             e.source.postMessage({
                 type: 'gx:ai-context',
                 requestId: e.data.requestId,
-                payload: { text: text, grid: grid },
+                payload: {
+                    text: text, grid: grid,
+                    sheets: sheets, activeSheet: window.activeSheetId, mode: mode,
+                },
             }, e.origin);
             return;
         }
