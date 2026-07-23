@@ -79,6 +79,8 @@
     function _resolveSheet(op) {
         var ref = op && op.sheet;
         if (!ref) return false;                       // act on the active sheet
+        ref = String(ref).replace(/^@/, '').trim();   // models echo the @ prefix — strip it
+        if (!ref) return false;
         var sheets = window.sheets || [];
         var byId = sheets.find(function (s) { return s.id === ref; });
         var byName = byId || sheets.find(function (s) {
@@ -141,7 +143,8 @@
         { name: 'transpose', group: 'table', doc: 'Swap rows and columns of the whole table. Optional sheet.', params: { sheet: { type: 'string' } } },
         { name: 'transpose_selection', group: 'table', doc: 'Transpose only the currently selected cell range.', params: {} },
         { name: 'copy_clipboard', group: 'table', doc: 'Copy the current table to the clipboard.', params: {} },
-        { name: 'generate_tabs', group: 'table', doc: 'Convert the table to tab-separated text.', params: {} },
+        { name: 'make_tabs', group: 'table', doc: 'Add N collapsible tabs to a sheet: wraps its table(s) into accordion cards with `count` tab buttons to iterate through. THIS single op is the COMPLETE way to add "tabs"/collapsible views — do NOT accompany it with apply_id, apply_class, or per-column ops; make_tabs handles the whole structure itself.',
+          params: { count: { type: 'int', min: 1, max: 100 }, sheet: { type: 'string' } } },
         // ── Table viewer: style / class / id / attributes / collapsible ──────────
         { name: 'apply_class', group: 'style', doc: 'Apply a CSS class name to the target elements (rows/cols/cells/table).',
           params: { class: { type: 'string' }, target: { type: 'enum', values: ['cell', 'row', 'column', 'table'] } } },
@@ -153,8 +156,7 @@
           params: { style: { type: 'enum', values: ['padding', 'margin'] }, top: { type: 'number' }, right: { type: 'number' }, bottom: { type: 'number' }, left: { type: 'number' }, target: { type: 'enum', values: ['cell', 'row', 'column', 'table'] } } },
         { name: 'set_attribute', group: 'style', doc: 'Set a table attribute (e.g. table-layout, border-collapse).',
           params: { attribute: { type: 'string' }, value: { type: 'string' } } },
-        { name: 'make_collapsible', group: 'style', doc: 'Turn a column group into a collapsible/accordion column (applies class + id then inits the selector).',
-          params: { id: { type: 'string' }, column: { type: 'int' } } },
+        // (collapsible "tabs" are done with make_tabs, above — not a per-column op)
         // ── Node editor ──────────────────────────────────────────────────────────
         { name: 'set_mode', group: 'mode', doc: 'Switch tool mode (from /table-view /lab-mode /node references).',
           params: { mode: { type: 'enum', values: ['table', 'lab', 'node'] } } },
@@ -210,7 +212,19 @@
         }
 
         // create_table / new_sheet open a NEW sheet (the default for any new table).
+        // GUARD: if the op names an EXISTING sheet, the model meant "edit that
+        // sheet", not "rebuild it" — switch to it and do nothing destructive.
         if (name === 'create_table' || name === 'new_sheet') {
+            var cleanName = op.name ? String(op.name).replace(/^@/, '').trim() : null;
+            if (cleanName) {
+                var existing = (window.sheets || []).find(function (s) {
+                    return (s.name || '').toLowerCase() === cleanName.toLowerCase() || s.id === cleanName;
+                });
+                if (existing) {
+                    if (existing.id !== window.activeSheetId && typeof window.switchSheet === 'function') window.switchSheet(existing.id);
+                    return { ok: true, switchedToExisting: existing.id, note: 'named an existing sheet — switched instead of rebuilding' };
+                }
+            }
             var r = op.rows || 2, c = op.cols || 2;
             var rowsArr = [];
             for (var i = 0; i < Math.max(1, r) - 1; i++) {
@@ -219,7 +233,7 @@
                 rowsArr.push(o);
             }
             if (typeof window.loadTablesAsSheets === 'function') {
-                window.loadTablesAsSheets({ schema: 'gx-tables-v1', tables: [{ name: op.name || null, rows: rowsArr.length ? rowsArr : [{ 'Column 1': '' }] }] });
+                window.loadTablesAsSheets({ schema: 'gx-tables-v1', tables: [{ name: cleanName || null, rows: rowsArr.length ? rowsArr : [{ 'Column 1': '' }] }] });
                 return { ok: true, newSheet: true };
             }
             if (typeof window.addBlankSheet === 'function') { window.addBlankSheet(); return { ok: true }; }
@@ -248,9 +262,18 @@
             case 'copy_clipboard':
                 if (typeof window.copySelected === 'function') { window.copySelected(); return { ok: true }; }
                 return _notBuilt('copy_clipboard');
-            case 'generate_tabs':
-                if (typeof window.generateTabs === 'function') { return { text: window.generateTabs() }; }
-                return _notBuilt('generate_tabs');
+            case 'make_tabs': {
+                // The real "tabs"/collapsible feature: set the tab count (#buttonIndex)
+                // then generateTabs wraps the sheet's table(s) into accordion cards.
+                _resolveSheet(op);
+                if (typeof window.generateTabs !== 'function') return _notBuilt('make_tabs');
+                var count = Math.max(1, Math.min(100, op.count || 1));
+                _setField('buttonIndex', count);
+                var t = _table();
+                var html = t ? t.outerHTML : (document.getElementById('tableContainer') || {}).innerHTML;
+                window.generateTabs(html);
+                return { ok: true, tabs: count };
+            }
 
             // ── style/class/id (drive the style panel's applyClassId) ────────────
             case 'apply_class':
@@ -258,7 +281,6 @@
             case 'set_style':
             case 'set_spacing':
             case 'set_attribute':
-            case 'make_collapsible':
                 return _applyStyleOp(name, op);
 
             // ── node editor ──────────────────────────────────────────────────────
@@ -320,7 +342,7 @@
             var el = document.getElementById(f); if (el && el.tagName === 'INPUT') el.value = '';
         });
         if (name === 'apply_class') _setField('classInput', op.class);
-        if (name === 'apply_id' || name === 'make_collapsible') _setField('idInput', op.id);
+        if (name === 'apply_id') _setField('idInput', op.id);
         if (name === 'set_style') { _setField('styleInput', op.style); _setField('cellColor', op.color); }
         if (name === 'set_spacing') {
             _setField('styleInput', op.style);
@@ -329,15 +351,6 @@
         }
         if (name === 'set_attribute') { _setField('tableAttribute', op.attribute); _setField('attributeValue', op.value); }
         window.applyClassId();
-        // make_collapsible additionally (re)inits the accordion + sp-selector
-        // handlers so the tagged column group becomes collapsible.
-        if (name === 'make_collapsible') {
-            try {
-                if (typeof window.initAccordions === 'function') window.initAccordions();
-                if (typeof window.initSpSelectors === 'function') window.initSpSelectors();
-                if (typeof window.headerAccordion === 'function') window.headerAccordion();
-            } catch (_) { /* selector init best-effort */ }
-        }
         return { ok: true };
     }
 
