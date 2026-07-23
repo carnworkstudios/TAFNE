@@ -316,6 +316,15 @@
           <!-- class="theme-toggle-btn active" -->
           ☰
         </button>
+        <!-- Right panel toggle -->
+        <button
+          id="toggleRightPanel"
+          title="Hide Code Panel"
+          aria-label="Toggle code panel"
+          style="font-size: 13px; font-weight: 700; background: lightgray; border: 2px solid lightgray; border-radius: 3px;"
+        >
+          &lt;/&gt;
+        </button>
         <!-- Theme toggle -->
         <button
           id="themeToggle"
@@ -475,113 +484,122 @@
               placeholder="element id"
             />
           </div>
-          <div class="form-group mb-2 tableStyle">
-            <label for="styleInput" style="font-size: 11px">CSS Style</label>
-            <select
-              id="styleInput"
-              class="form-control form-control-sm"
-              name="styleInput"
-            >
-              <option value=""></option>
-              <optgroup label="COLORS">
-                <option value="background-color">Background Color</option>
-                <option value="color">Text Color</option>
-                <option value="border-color">Border Color</option>
-              </optgroup>
-              <optgroup label="SPACING">
-                <option value="padding">Padding</option>
-                <option value="margin">Margin</option>
-              </optgroup>
-              <optgroup label="BORDER-COLLAPSE">
-                <option value="border-collapse: collapse">
-                  Border-Collapse: Collapse
-                </option>
-                <option value="border-collapse: separate">
-                  Border-Collapse: Separate
-                </option>
-              </optgroup>
-            </select>
-          </div>
-          <div class="form-group mb-2">
-            <label for="cellColor" style="font-size: 11px">Color</label>
-            <input class="w-100" type="color" id="cellColor" value="#cccccc" />
-          </div>
-          <div style="font-size: 11px; margin-bottom: 4px">
-            Spacing (T / R / B / L)
-          </div>
-          <div class="style-controls">
-            <div class="form-group mb-1">
-              <label style="font-size: 10px">T:</label>
-              <input
-                type="number"
-                class="form-control form-control-sm text-center"
-                id="spacingTop"
-                min="0"
-                max="20"
-                step="1"
-              />
+          <details class="tf-subgroup">
+            <summary>Style &amp; Color</summary>
+            <div class="tf-subgroup-body">
+              <div class="form-group mb-2 tableStyle tf-inline-row">
+                <select
+                  id="styleInput"
+                  class="form-control form-control-sm"
+                  name="styleInput"
+                  title="CSS Style"
+                >
+                  <option value="">CSS Style…</option>
+                  <optgroup label="COLORS">
+                    <option value="background-color">Background Color</option>
+                    <option value="color">Text Color</option>
+                    <option value="border-color">Border Color</option>
+                  </optgroup>
+                  <optgroup label="SPACING">
+                    <option value="padding">Padding</option>
+                    <option value="margin">Margin</option>
+                  </optgroup>
+                  <optgroup label="BORDER-COLLAPSE">
+                    <option value="border-collapse: collapse">
+                      Border-Collapse: Collapse
+                    </option>
+                    <option value="border-collapse: separate">
+                      Border-Collapse: Separate
+                    </option>
+                  </optgroup>
+                </select>
+                <input
+                  type="color"
+                  id="cellColor"
+                  value="#cccccc"
+                  title="Color"
+                />
+              </div>
+              <div style="font-size: 11px; margin-bottom: 4px">
+                Spacing (T / R / B / L)
+              </div>
+              <div class="style-controls">
+                <div class="form-group mb-1">
+                  <label style="font-size: 10px">T:</label>
+                  <input
+                    type="number"
+                    class="form-control form-control-sm text-center"
+                    id="spacingTop"
+                    min="0"
+                    max="20"
+                    step="1"
+                  />
+                </div>
+                <div class="form-group mb-1">
+                  <label style="font-size: 10px">R:</label>
+                  <input
+                    type="number"
+                    class="form-control form-control-sm text-center"
+                    id="spacingRight"
+                    min="0"
+                    max="20"
+                    step="1"
+                  />
+                </div>
+                <div class="form-group mb-1">
+                  <label style="font-size: 10px">B:</label>
+                  <input
+                    type="number"
+                    class="form-control form-control-sm text-center"
+                    id="spacingBottom"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                  />
+                </div>
+                <div class="form-group mb-1">
+                  <label style="font-size: 10px">L:</label>
+                  <input
+                    type="number"
+                    class="form-control form-control-sm text-center"
+                    id="spacingLeft"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                  />
+                </div>
+              </div>
             </div>
-            <div class="form-group mb-1">
-              <label style="font-size: 10px">R:</label>
-              <input
-                type="number"
-                class="form-control form-control-sm text-center"
-                id="spacingRight"
-                min="0"
-                max="20"
-                step="1"
-              />
+          </details>
+          <details class="tf-subgroup">
+            <summary>Colspan / Rowspan</summary>
+            <div class="tf-subgroup-body">
+              <div class="form-group mb-2 tf-inline-row">
+                <select
+                  id="tableAttribute"
+                  class="form-control form-control-sm"
+                  name="tableAttribute"
+                  title="Attribute"
+                >
+                  <option value="">Attribute…</option>
+                  <optgroup label="ATTRIBUTES">
+                    <option value="colspan">Colspan</option>
+                    <option value="rowspan">Rowspan</option>
+                  </optgroup>
+                </select>
+                <input
+                  type="number"
+                  class="form-control form-control-sm text-center tf-attr-value"
+                  id="attributeValue"
+                  min="0"
+                  max="20"
+                  step="1"
+                  value="1"
+                  title="Attribute value"
+                />
+              </div>
             </div>
-            <div class="form-group mb-1">
-              <label style="font-size: 10px">B:</label>
-              <input
-                type="number"
-                class="form-control form-control-sm text-center"
-                id="spacingBottom"
-                min="0"
-                max="1"
-                step="0.1"
-              />
-            </div>
-            <div class="form-group mb-1">
-              <label style="font-size: 10px">L:</label>
-              <input
-                type="number"
-                class="form-control form-control-sm text-center"
-                id="spacingLeft"
-                min="0"
-                max="1"
-                step="0.1"
-              />
-            </div>
-          </div>
-          <div class="form-group mb-2">
-            <label for="tableAttribute" style="font-size: 11px"
-              >Attributes</label
-            >
-            <select
-              id="tableAttribute"
-              class="form-control form-control-sm"
-              name="tableAttribute"
-            >
-              <option value=""></option>
-              <optgroup label="ATTRIBUTES">
-                <option value="colspan">Colspan</option>
-                <option value="rowspan">Rowspan</option>
-              </optgroup>
-            </select>
-          </div>
-          <div class="form-group mb-2">
-            <input
-              type="number"
-              class="form-control form-control-sm text-center"
-              id="attributeValue"
-              min="0"
-              max="20"
-              step="1"
-              value="1"
-            />
-          </div>
+          </details>
           <button
             id="applyClassId"
             class="btn btn-sm btn-outline-secondary w-100"
@@ -2007,6 +2025,35 @@
           CwsBridge.send("ginexys:mcp-reply", {
             requestId: msg.requestId,
             payload: { formatted: formatted || null },
+          });
+        });
+
+        // MCP round-trip: extension host requests the current table as a 2D grid
+        window.addEventListener("message", function (e) {
+          var msg = e.data;
+          if (!msg || !msg.__ginexys || msg.type !== "ginexys:mcp-read-table") return;
+          var ctxTable = window.currentTable || $("#tableContainer table")[0];
+          var grid = null;
+          if (ctxTable) {
+            grid = Array.from(ctxTable.rows, function (row) {
+              return Array.from(row.cells, function (cell) { return cell.innerText.trim(); });
+            });
+          }
+          CwsBridge.send("ginexys:mcp-reply", {
+            requestId: msg.requestId,
+            payload: { grid: grid },
+          });
+        });
+
+        // MCP apply-ops: extension host sends validated ops to execute on the table
+        window.addEventListener("message", function (e) {
+          var msg = e.data;
+          if (!msg || !msg.__ginexys || msg.type !== "ginexys:mcp-apply-ops") return;
+          if (!Array.isArray(msg.ops)) return;
+          window.postMessage({ type: "gx:ai-apply-ops", ops: msg.ops }, window.location.origin);
+          CwsBridge.send("ginexys:mcp-reply", {
+            requestId: msg.requestId,
+            payload: { applied: msg.ops.length },
           });
         });
 

@@ -249,8 +249,11 @@
 
     // Grow the anchor cell's span so it covers the rectangle [r0..r1]×[c0..c1]. Only ever grows
     // (the target is clamped to include the anchor's current extent), so a drag never destroys the
-    // anchor. Absorbed neighbours must be plain 1×1 cells; they are removed. For a top/left stretch
-    // the anchor's origin moves up/left; for top the <td> is relocated into the new top row.
+    // anchor. Horizontal growth never deletes content: swept plain cells are bumped to the right,
+    // and rows the anchor doesn't cover are padded to match — so dragging past the right edge
+    // creates new columns. Vertical growth absorbs swept plain cells (classic merge); dragging past
+    // the bottom edge creates the missing rows. For a top/left stretch the anchor's origin moves
+    // up/left; for top the <td> is relocated into the new top row.
     function applySpanGrow(aBase, r0, c0, r1, c1) {
         const table = activeTable();
         if (!table) return false;
@@ -262,54 +265,96 @@
         const ar0 = p.startRow, ac0 = p.startCol;
         const ar1 = ar0 + p.rowspan - 1, ac1 = ac0 + p.colspan - 1;
 
-        // Grow-only + clamp into the grid.
+        // Grow-only. Top/left clamp at the grid origin; right/bottom may exceed the grid —
+        // the overshoot becomes new columns/rows.
         r0 = Math.max(0, Math.min(r0, ar0));
         c0 = Math.max(0, Math.min(c0, ac0));
-        r1 = Math.min(m.maxRows - 1, Math.max(r1, ar1));
-        c1 = Math.min(m.maxCols - 1, Math.max(c1, ac1));
+        r1 = Math.max(r1, ar1);
+        c1 = Math.max(c1, ac1);
         if (r0 === ar0 && c0 === ac0 && r1 === ar1 && c1 === ac1) return false;
 
-        // Validate + collect the cells to absorb (everything in the target rect that isn't the anchor).
-        const toRemove = new Set();
-        for (let r = r0; r <= r1; r++) {
-            for (let c = c0; c <= c1; c++) {
+        const horizontal = (c0 !== ac0 || c1 !== ac1);
+
+        // Existing cells in the swept area must be plain 1×1 origins.
+        const swept = [];
+        const chkR1 = Math.min(r1, m.maxRows - 1);
+        const chkC1 = Math.min(c1, m.maxCols - 1);
+        for (let r = r0; r <= chkR1; r++) {
+            for (let c = c0; c <= chkC1; c++) {
                 if (r >= ar0 && r <= ar1 && c >= ac0 && c <= ac1) continue; // anchor's own area
                 const gc = m.grid[r] && m.grid[r][c];
-                if (!gc || !gc.isOrigin) {
-                    $.toast({ heading: 'Info', text: 'Can only stretch over plain, unmerged cells.', icon: 'warning', loader: false, stack: false });
-                    return false;
-                }
+                if (!gc) continue; // ragged spot — the span just covers it
                 const pp = m.getVisualPosition(gc.element);
-                if (pp.rowspan > 1 || pp.colspan > 1) {
+                if (!gc.isOrigin || pp.rowspan > 1 || pp.colspan > 1) {
                     $.toast({ heading: 'Info', text: 'Can only stretch over plain, unmerged cells.', icon: 'warning', loader: false, stack: false });
                     return false;
                 }
-                toRemove.add(gc.element);
+                swept.push(gc.element);
             }
         }
 
         window.saveCurrentState();
 
-        const movesUp = r0 < ar0; // top stretch relocates the anchor into row r0
-        toRemove.forEach(el => el.remove());
+        const newColspan = c1 - c0 + 1;
+        const newRowspan = r1 - r0 + 1;
+        const $trs = $(table).find('tr');
 
-        // Relocate the anchor <td> into the new top row before applying the taller rowspan,
-        // so it lives in its top-left cell as required by HTML table semantics.
-        if (movesUp) {
-            const m2 = new window.VisualGridMapper(table);
-            const $targetTr = $(table).find('tr').eq(r0);
-            let ref = null;
-            $targetTr.children('td, th').each(function () {
-                if (this === anchor) return;
-                const pos = m2.getVisualPosition(this);
-                if (pos && pos.startCol >= c0) { ref = this; return false; }
+        if (horizontal) {
+            const growCols = newColspan - (ac1 - ac0 + 1);
+            // Left stretch: relocate the anchor before the cells it now bumps rightward.
+            if (c0 < ac0) {
+                let ref = null;
+                $trs.eq(ar0).children('td, th').each(function () {
+                    if (this === anchor) return;
+                    const pos = m.getVisualPosition(this);
+                    if (pos && pos.startCol >= c0) { ref = this; return false; }
+                });
+                if (ref) $(ref).before(anchor);
+            }
+            // Widening the anchor pushes the swept cells right; pad the rows the anchor
+            // doesn't cover so every row gains the same number of columns.
+            $trs.each(function (i) {
+                if (i >= ar0 && i <= ar1) return;
+                for (let k = 0; k < growCols; k++) {
+                    const tag = this.lastElementChild ? this.lastElementChild.tagName : 'td';
+                    this.appendChild(document.createElement(tag));
+                }
             });
-            if (ref) $(ref).before(anchor);
-            else $targetTr.append(anchor);
+        } else {
+            // Vertical stretch: absorb the swept plain cells.
+            swept.forEach(el => el.remove());
+
+            // Relocate the anchor <td> into the new top row before applying the taller rowspan,
+            // so it lives in its top-left cell as required by HTML table semantics.
+            if (r0 < ar0) {
+                const m2 = new window.VisualGridMapper(table);
+                const $targetTr = $trs.eq(r0);
+                let ref = null;
+                $targetTr.children('td, th').each(function () {
+                    if (this === anchor) return;
+                    const pos = m2.getVisualPosition(this);
+                    if (pos && pos.startCol >= c0) { ref = this; return false; }
+                });
+                if (ref) $(ref).before(anchor);
+                else $targetTr.append(anchor);
+            }
+
+            // Bottom stretch past the last row: create the missing rows. The anchor's span
+            // fills its own columns there, so new rows only need cells for the remainder.
+            if (r1 > m.maxRows - 1) {
+                const parent = $trs.last().parent()[0] || table;
+                for (let r = m.maxRows; r <= r1; r++) {
+                    const tr = document.createElement('tr');
+                    for (let k = 0; k < m.maxCols - newColspan; k++) {
+                        tr.appendChild(document.createElement('td'));
+                    }
+                    parent.appendChild(tr);
+                }
+            }
         }
 
-        setSpanAttr(anchor, 'colspan', c1 - c0 + 1);
-        setSpanAttr(anchor, 'rowspan', r1 - r0 + 1);
+        setSpanAttr(anchor, 'colspan', newColspan);
+        setSpanAttr(anchor, 'rowspan', newRowspan);
 
         // Reselect just the stretched cell.
         $(table).find('.selected-cell').removeClass('selected-cell');
@@ -349,9 +394,44 @@
         const refPos = startCell ? box.mapper.getVisualPosition(startCell) : null;
         let lastKey = '';
 
+        // Preview + record a span target; er/ec may extend past the existing grid, in which
+        // case the overlay is stretched by the table's average column width / row height.
+        function previewSpan(sr, sc, er, ec) {
+            const key = sr + ':' + sc + ':' + er + ':' + ec;
+            if (key === lastKey) return;
+            lastKey = key;
+            const m = box.mapper;
+            const inEr = Math.min(er, m.maxRows - 1);
+            const inEc = Math.min(ec, m.maxCols - 1);
+            highlightRegion(m, sr, sc, inEr, inEc);
+            const rect = boundsForRegion(m, sr, sc, inEr, inEc);
+            if (rect) {
+                const tRect = activeTable().getBoundingClientRect();
+                if (ec > inEc) rect.width += (ec - inEc) * (tRect.width / m.maxCols);
+                if (er > inEr) rect.height += (er - inEr) * (tRect.height / m.maxRows);
+                $overlay.css({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+            }
+            $overlay[0].dataset.spSr = sr; $overlay[0].dataset.spSc = sc;
+            $overlay[0].dataset.spEr = er; $overlay[0].dataset.spEc = ec;
+        }
+
         function onMove(mv) {
             const cur = cellUnderPoint(mv.clientX, mv.clientY);
-            if (!cur) return;
+            if (!cur) {
+                // Span drags may leave the table: past the right/bottom edge the target
+                // extends into columns/rows that don't exist yet and get created on drop.
+                if (kind !== 'span') return;
+                const tRect = activeTable().getBoundingClientRect();
+                const m = box.mapper;
+                if (edge === 'right' && mv.clientX > tRect.right) {
+                    const extra = Math.max(1, Math.ceil((mv.clientX - tRect.right) / (tRect.width / m.maxCols)));
+                    previewSpan(aBase.r0, aBase.c0, aBase.r1, Math.max(aBase.c1, m.maxCols - 1 + extra));
+                } else if (edge === 'bottom' && mv.clientY > tRect.bottom) {
+                    const extra = Math.max(1, Math.ceil((mv.clientY - tRect.bottom) / (tRect.height / m.maxRows)));
+                    previewSpan(aBase.r0, aBase.c0, Math.max(aBase.r1, m.maxRows - 1 + extra), aBase.c1);
+                }
+                return;
+            }
             const p = box.mapper.getVisualPosition(cur);
             if (!p) return;
 
@@ -384,14 +464,7 @@
                 if (edge === 'left')   sc = Math.min(aBase.c0, p.startCol);
                 if (edge === 'bottom') er = Math.max(aBase.r1, p.startRow + p.rowspan - 1);
                 if (edge === 'top')    sr = Math.min(aBase.r0, p.startRow);
-                const key = sr + ':' + sc + ':' + er + ':' + ec;
-                if (key === lastKey) return;
-                lastKey = key;
-                highlightRegion(box.mapper, sr, sc, er, ec);
-                const rect = boundsForRegion(box.mapper, sr, sc, er, ec);
-                if (rect) $overlay.css({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
-                $overlay[0].dataset.spSr = sr; $overlay[0].dataset.spSc = sc;
-                $overlay[0].dataset.spEr = er; $overlay[0].dataset.spEc = ec;
+                previewSpan(sr, sc, er, ec);
             }
         }
 

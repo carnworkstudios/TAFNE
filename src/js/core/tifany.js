@@ -1054,6 +1054,22 @@ $(function () {
         $(this).toggleClass('active', !isHidden);
     });
 
+    // =================== RIGHT PANEL TOGGLE ===================
+    $('#toggleRightPanel').on('click', function () {
+        const $panel = $('.tifany-right-panel');
+        $panel.toggleClass('panel-hidden');
+        const isHidden = $panel.hasClass('panel-hidden');
+        $(this).attr('title', isHidden ? 'Show Code Panel' : 'Hide Code Panel');
+        $(this).toggleClass('active', !isHidden);
+    });
+
+    // =================== LEFT PANEL SECTION ACCORDION ===================
+    // Section headers rendered as <button> collapse/expand the body that follows them.
+    $('.tifany-left-panel').on('click', 'button.left-section-header', function () {
+        $(this).toggleClass('collapsed')
+            .next('.left-section-body').toggleClass('collapsed');
+    });
+
     // =================== RIGHT PANEL RESIZE ===================
     (function () {
         var $handle = $('.right-panel-resize-handle');
@@ -1196,6 +1212,135 @@ $(function () {
         }
         if (typeof parseInput === 'function') parseInput();
     }
+
+    // AI layer: OCR-transcribed table arrives from the OS shell's AI panel
+    // (win-ipc-panel AI view → backend /api/v1/ai/ocr → CSV). New sheet per import.
+    window.addEventListener('message', function (e) {
+        if (e.origin !== window.location.origin) { return; }
+        if (e.data?.type !== 'gx:ai-ocr-table' || typeof e.data.csv !== 'string') { return; }
+        if (typeof parseCsvInput !== 'function' || typeof addSheet !== 'function') { return; }
+        var rawHtml;
+        try { rawHtml = parseCsvInput(e.data.csv.trim()); } catch (err) { return; }
+        if (!rawHtml) { return; }
+        addSheet(e.data.name ? 'OCR — ' + e.data.name : 'OCR import', rawHtml);
+    });
+
+    // AI layer: content requests + validated op application from the OS shell.
+    // gx:ai-get-context → reply with the active table as grid + TSV text.
+    // gx:ai-apply-ops   → execute ops the backend verifier accepted (user confirmed
+    // them in the shell's mini modal). Structural ops only; unknown ops are skipped.
+    window.addEventListener('message', function (e) {
+        if (e.origin !== window.location.origin || !e.data) { return; }
+
+        if (e.data.type === 'gx:ai-get-context') {
+            var ctxTable = window.currentTable || $('#tableContainer table')[0];
+            var grid = null, text = '';
+            if (ctxTable) {
+                grid = Array.from(ctxTable.rows, function (row) {
+                    return Array.from(row.cells, function (cell) { return cell.innerText.trim(); });
+                });
+                text = grid.map(function (r) { return r.join('\t'); }).join('\n');
+            }
+            e.source.postMessage({
+                type: 'gx:ai-context',
+                requestId: e.data.requestId,
+                payload: { text: text, grid: grid },
+            }, e.origin);
+            return;
+        }
+
+        if (e.data.type === 'gx:ai-apply-ops' && Array.isArray(e.data.ops)) {
+            // create_table
+            var createOp = null;
+            for (var ci = 0; ci < e.data.ops.length; ci++) {
+                if (e.data.ops[ci].op === 'create_table') { createOp = e.data.ops[ci]; break; }
+            }
+            if (createOp) {
+                if (typeof window.createNewTable === 'function') {
+                    window.createNewTable(createOp.rows, createOp.cols);
+                }
+            }
+            var table = window.currentTable || $('#tableContainer table')[0];
+            if (!table) { return; }
+            var skipped = 0;
+            e.data.ops.forEach(function (op) {
+                if (op.op === 'create_table') return;
+                try {
+                    var rows = table.rows;
+                    var cols = rows[0] ? rows[0].cells.length : 0;
+                    if (op.op === 'set_cell' && rows[op.row] && rows[op.row].cells[op.col]) {
+                        rows[op.row].cells[op.col].innerText = op.text;
+                    } else if (op.op === 'add_row') {
+                        var tr = table.insertRow(Math.min(op.index, rows.length));
+                        for (var i = 0; i < cols; i++) { tr.insertCell(-1); }
+                    } else if (op.op === 'delete_row' && rows[op.index]) {
+                        table.deleteRow(op.index);
+                    } else if (op.op === 'add_column') {
+                        Array.prototype.forEach.call(rows, function (row) {
+                            row.insertCell(Math.min(op.index, row.cells.length));
+                        });
+                    } else if (op.op === 'delete_column') {
+                        Array.prototype.forEach.call(rows, function (row) {
+                            if (row.cells[op.index]) { row.deleteCell(op.index); }
+                        });
+                    } else if (op.op === 'merge_cells') {
+                        var sr = Math.max(0, op.start_row), sc = Math.max(0, op.start_col);
+                        var er = Math.min(rows.length - 1, op.end_row), ec = Math.min(cols - 1, op.end_col);
+                        if (sr >= er && sc >= ec) { skipped++; return; }
+                        var anchor = rows[sr].cells[sc];
+                        var rowSpan = er - sr + 1, colSpan = ec - sc + 1;
+                        for (var r = sr; r <= er; r++) {
+                            for (var c = sc; c <= ec; c++) {
+                                if (r === sr && c === sc) continue;
+                                var cell = rows[r].cells[sc];
+                                if (cell) cell.remove();
+                            }
+                        }
+                        anchor.rowSpan = rowSpan;
+                        anchor.colSpan = colSpan;
+                    } else if (op.op === 'move_row') {
+                        var fromR = op.from_index, toR = op.to_index;
+                        if (fromR === toR || fromR < 0 || fromR >= rows.length || toR < 0) { skipped++; return; }
+                        var targetIdx = Math.min(toR, rows.length - 1);
+                        var movedRow = table.rows[fromR];
+                        if (!movedRow) { skipped++; return; }
+                        var newRow = movedRow.cloneNode(true);
+                        table.deleteRow(fromR);
+                        var insertAt = targetIdx > fromR ? targetIdx - 1 : targetIdx;
+                        var refRow = table.rows[insertAt];
+                        if (refRow) {
+                            refRow.parentNode.insertBefore(newRow, refRow);
+                        } else {
+                            table.appendChild(newRow);
+                        }
+                    } else if (op.op === 'move_column') {
+                        var fromC = op.from_index, toC = op.to_index;
+                        if (fromC === toC || fromC < 0 || fromC >= cols || toC < 0) { skipped++; return; }
+                        var targetC = Math.min(toC, cols - 1);
+                        Array.prototype.forEach.call(rows, function (row) {
+                            if (!row.cells[fromC]) return;
+                            var cell = row.cells[fromC];
+                            var cellHtml = cell.innerHTML;
+                            cell.remove();
+                            var insertAt = targetC > fromC ? targetC - 1 : targetC;
+                            var ref = row.cells[insertAt];
+                            if (ref) {
+                                ref.insertAdjacentHTML('beforebegin', '<td>' + cellHtml + '</td>');
+                            } else {
+                                row.insertCell(-1).innerHTML = cellHtml;
+                            }
+                        });
+                    } else {
+                        skipped++;
+                    }
+                } catch (err) { skipped++; }
+            });
+            if (typeof window.saveCurrentState === 'function') { window.saveCurrentState(); }
+            if (typeof showToast === 'function') {
+                showToast('AI ops applied' + (skipped ? ' (' + skipped + ' skipped)' : ''), 'success');
+            }
+        }
+    });
 
     // Live sync from VS Code text editor → table re-render.
     // Updates sheets in-place so we never call addSheet() on every keystroke

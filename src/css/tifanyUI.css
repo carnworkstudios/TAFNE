@@ -263,6 +263,10 @@ body {
     display: none;
 }
 
+.tifany-right-panel.panel-hidden {
+    display: none;
+}
+
 /* --- Center panel --- */
 .tifany-center-panel {
     flex: 1;
@@ -337,6 +341,92 @@ body {
 .left-section-body {
     padding: 8px 12px 10px;
     border-bottom: 1px solid var(--t-border);
+}
+
+/* Collapsible left sections: button headers toggle .collapsed on their body */
+button.left-section-header::after {
+    content: '▾';
+    float: right;
+    font-size: 9px;
+    color: var(--t-text-muted);
+}
+
+button.left-section-header.collapsed::after {
+    content: '▸';
+}
+
+.left-section-body.collapsed {
+    display: none;
+}
+
+/* Compact sub-groups inside the Styles & ID section */
+.tf-subgroup {
+    border: 1px solid var(--t-border);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background: var(--t-bg-input);
+    overflow: hidden;
+}
+
+.tf-subgroup summary {
+    cursor: pointer;
+    user-select: none;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--t-section-header);
+    padding: 6px 8px;
+    list-style: none;
+}
+
+.tf-subgroup summary::-webkit-details-marker {
+    display: none;
+}
+
+.tf-subgroup summary::after {
+    content: '▸';
+    float: right;
+    font-size: 9px;
+    color: var(--t-text-muted);
+}
+
+.tf-subgroup[open] summary::after {
+    content: '▾';
+}
+
+.tf-subgroup[open] summary {
+    border-bottom: 1px solid var(--t-border);
+}
+
+.tf-subgroup-body {
+    padding: 8px;
+}
+
+/* One-line control rows (style select + color swatch, attribute + value) */
+.tf-inline-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.tf-inline-row select {
+    flex: 1;
+    min-width: 0;
+}
+
+.tf-inline-row input[type='color'] {
+    width: 34px;
+    height: 28px;
+    padding: 1px;
+    flex-shrink: 0;
+    border: 1px solid var(--t-border);
+    border-radius: 4px;
+    background: var(--t-bg-input);
+    cursor: pointer;
+}
+
+.tf-inline-row .tf-attr-value {
+    width: 58px;
+    flex: 0 0 58px;
 }
 
 /* ===========================
@@ -1789,7 +1879,8 @@ body.node-editor-active #sheetTabBar {
     }
 
     /* turn off sidebar */
-    #toggleLeftPanel {
+    #toggleLeftPanel,
+    #toggleRightPanel {
         display: none;
     }
 
@@ -1885,6 +1976,36 @@ body.node-editor-active #sheetTabBar {
 
     .tifany-left-panel.mobile-open {
         transform: translateY(0);
+    }
+
+    /* Tighter bottom-sheet layout: less vertical travel between controls */
+    .tifany-left-panel .left-section-body {
+        padding: 6px 12px 8px;
+    }
+
+    .tifany-left-panel .form-group.mb-2 {
+        margin-bottom: 4px !important;
+    }
+
+    .tifany-left-panel .form-group label {
+        margin-bottom: 1px;
+    }
+
+    /* Spacing T/R/B/L inputs share one row instead of wrapping */
+    .tifany-left-panel .style-controls {
+        display: flex;
+        gap: 6px;
+    }
+
+    .tifany-left-panel .style-controls .form-group {
+        flex: 1;
+        min-width: 0;
+    }
+
+    /* Bigger touch targets on section headers */
+    .left-section-header {
+        padding: 12px 14px 8px;
+        font-size: 11px;
     }
 
     /* Right panel: same treatment */
