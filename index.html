@@ -2233,7 +2233,12 @@
         CwsBridge.onData(async function (envelope) {
           if (window.GxProvenance) window.GxProvenance.captureIncoming(envelope);
           var action = envelope?.hints?.action;
-          if (action === "load-tables") {
+          // load-candidate-tables = the PDF candidate-artifact contract: the
+          // tables arrive extracted-UNCERTAIN, to be verified here, not trusted.
+          // Same load path as load-tables; the difference is TAFNE announces it
+          // needs verification and (if the trust-stage module is present) records
+          // the incoming extraction score so the validated tags supersede it.
+          if (action === "load-tables" || action === "load-candidate-tables") {
             try {
               var traw = envelope.pointer
                 ? await CwsBridge.getStore(envelope.pointer)
@@ -2241,6 +2246,15 @@
               var tdata = JSON.parse(traw);
               if (tdata.schema === "gx-tables-v1" && typeof loadTablesAsSheets === "function") {
                 loadTablesAsSheets(tdata);
+                var isCandidate = action === "load-candidate-tables" || tdata.meta?.candidate;
+                if (isCandidate) {
+                  if (window.GxValidateTags && typeof window.GxValidateTags.markCandidate === "function") {
+                    window.GxValidateTags.markCandidate(tdata.tables || []);
+                  }
+                  $.toast({ heading: "TAFNE", text: "Received " + (tdata.tables?.length || 0) +
+                    " candidate table(s) — run Lab validation to verify.",
+                    icon: "info", loader: false, stack: false });
+                }
               }
             } catch (e) {
               $.toast({ heading: "TAFNE", text: "Failed to load tables: " + e.message,
