@@ -3,6 +3,7 @@
 <html lang="en" data-theme="light">
   <head>
 <base href="/tools/table-formatter/">
+    <script src="/assets/js/posthog-init.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
@@ -71,6 +72,7 @@
 
     <!-- OS Bridge (no-op when standalone, connects to kernel when in iframe) -->
     <script src="/assets/os/contracts.js"></script>
+    <script src="/assets/os/mcp.js"></script>
     <script src="/assets/os/bridge.js"></script>
 
     <!-- jQuery (must be before Bootstrap JS and TIFANY scripts) -->
@@ -115,7 +117,10 @@
     <script src="src/js/components/nodeTypes.js"></script>
     <!-- TAFNE Features -->
     <script src="src/js/features/applyClassID.js"></script>
+    <script src="src/js/features/classPanel.js"></script>
     <script src="src/js/features/dragDrop.js"></script>
+    <script src="src/js/features/cellHandles.js"></script>
+    <script src="src/js/features/newTable.js"></script>
     <script src="src/js/features/generateFunctions.js"></script>
     <script src="src/js/features/parseInputs.js"></script>
     <script src="src/js/features/tableManipulation.js"></script>
@@ -132,6 +137,7 @@
     <script src="src/js/features/nodeExecutor.js"></script>
     <script src="src/js/features/nodeEditor.js"></script>
     <script src="src/js/core/engine.js"></script>
+    <script src="src/js/features/mcpRegister.js"></script>
 
     <!-- TAFNE CSS -->
     <link rel="stylesheet" href="src/css/tableEditor.css" />
@@ -462,6 +468,8 @@
           </div>
           <div class="form-group mb-2">
             <label for="classInput" style="font-size: 11px">Class Name</label>
+            <!-- Existing classes on the selected element, as removable pills -->
+            <div class="tf-class-pills" id="classPills"></div>
             <div class="input-group input-group-sm">
               <div class="input-group-prepend">
                 <button class="input-group-text sp-class" id="basic-addon1">
@@ -472,7 +480,7 @@
                 type="text"
                 class="form-control"
                 id="classInput"
-                placeholder="class name"
+                placeholder="add class + Enter"
               />
             </div>
           </div>
@@ -1031,6 +1039,18 @@
                 style="width: 48px"
               />
             </label>
+
+            <div class="input-toolbar-divider"></div>
+
+            <!-- Draw a new table onto the current sheet -->
+            <button
+              type="button"
+              class="newTableBtn center-newtable-btn"
+              aria-label="Add table"
+              title="Add table — drag to size, then draw it onto this sheet"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 18h2v-3h3v-2h-3v-3h-2v3H8v2h3zm-5 4q-.825 0-1.412-.587T4 20V4q0-.825.588-1.412T6 2h8l6 6v12q0 .825-.587 1.413T18 22zm7-13V4H6v16h12V9zM6 4v5zv16z"></path></svg>
+            </button>
           </div>
 
           <span class="center-pos" id="tablePosition">Pos · 1:1</span>
@@ -1195,6 +1215,9 @@
         </button>
         <button class="textSplit btn btn-sm btn-outline-secondary py-0 px-1">
           Text Split
+        </button>
+        <button class="transposeSelection btn btn-sm btn-outline-secondary py-0 px-1" title="Transpose only the selected cells, row, or column">
+          Transpose Selection
         </button>
       </div>
       <h6>Delete</h6>
@@ -2009,6 +2032,21 @@
           })();
         }
 
+        // OS shell Send card (Pro) → gx:ipc-send. Schema Editor route reuses the
+        // back-annotate pipeline; the PDF card launches/focuses the PDF tool so
+        // its extraction can send tables back here.
+        window.addEventListener("message", function (e) {
+          if (e.origin !== window.location.origin || e.data?.type !== "gx:ipc-send") return;
+          if (e.data.target === "svg_wiring") {
+            var btn = document.getElementById("backAnnotateBtn");
+            if (btn) btn.click();
+          } else if (e.data.target === "pdf_processor") {
+            CwsBridge.send("cws:tool:launch", { toolId: "pdf_processor", focusAfterLaunch: true }, "os");
+            $.toast({ heading: "TAFNE", text: "PDF Extractor opened — extract there, then Send to TAFNE",
+              icon: "info", loader: false, stack: false });
+          }
+        });
+
         // MCP round-trip: extension host requests table export, reply with formatted output
         window.addEventListener("message", function (e) {
           var msg = e.data;
@@ -2047,6 +2085,7 @@
         });
 
         // MCP apply-ops: extension host sends validated ops to execute on the table
+        // Re-dispatches as same-origin gx:ai-apply-ops so tifany.js origin check passes.
         window.addEventListener("message", function (e) {
           var msg = e.data;
           if (!msg || !msg.__ginexys || msg.type !== "ginexys:mcp-apply-ops") return;
@@ -2059,8 +2098,71 @@
         });
 
         // Flow 1 receive: Schema Editor → TAFNE (load-diagram / load-netlist)
+        // Incoming lineage capture is intelligence-layer policy — the shell-
+        // provided GxProvenance module records it (no-op standalone/forked).
         CwsBridge.onData(async function (envelope) {
+          if (window.GxProvenance) window.GxProvenance.captureIncoming(envelope);
           var action = envelope?.hints?.action;
+          // load-candidate-tables = the PDF candidate-artifact contract: the
+          // tables arrive extracted-UNCERTAIN, to be verified here, not trusted.
+          // Same load path as load-tables; the difference is TAFNE announces it
+          // needs verification and (if the trust-stage module is present) records
+          // the incoming extraction score so the validated tags supersede it.
+          if (action === "load-tables" || action === "load-candidate-tables") {
+            try {
+              var traw = envelope.pointer
+                ? await CwsBridge.getStore(envelope.pointer)
+                : envelope.inline;
+              var tdata = JSON.parse(traw);
+              if (tdata.schema === "gx-tables-v1" && typeof loadTablesAsSheets === "function") {
+                loadTablesAsSheets(tdata);
+                var isCandidate = action === "load-candidate-tables" || tdata.meta?.candidate;
+                if (isCandidate) {
+                  if (window.GxValidateTags && typeof window.GxValidateTags.markCandidate === "function") {
+                    window.GxValidateTags.markCandidate(tdata.tables || []);
+                  }
+                  $.toast({ heading: "TAFNE", text: "Received " + (tdata.tables?.length || 0) +
+                    " candidate table(s) — run Lab validation to verify.",
+                    icon: "info", loader: false, stack: false });
+                }
+              }
+            } catch (e) {
+              $.toast({ heading: "TAFNE", text: "Failed to load tables: " + e.message,
+                icon: "error", loader: false, stack: false });
+            }
+            return;
+          }
+          // Artifacts/tags handoff (gx-tags-v1). Thin data dispatcher: table-kind
+          // tags become sheets; other kinds are passed to the artifacts panel to
+          // surface. Routing/construction POLICY lives in the injected panel.
+          if (action === "load-tags" || action === "load-text") {
+            try {
+              var graw = envelope.pointer
+                ? await CwsBridge.getStore(envelope.pointer)
+                : envelope.inline;
+              var gdata = JSON.parse(graw);
+              if (gdata.schema === "gx-tags-v1" && Array.isArray(gdata.tags)) {
+                var tableTags = gdata.tags.filter(function (t) {
+                  return t.kind === "table" || t.artifact?.kind === "table";
+                });
+                if (tableTags.length && typeof loadTablesAsSheets === "function") {
+                  // Tags carry references, not grids; if the sender inlined rows,
+                  // load them, else create a placeholder sheet per table tag.
+                  var tbls = tableTags.map(function (t, i) {
+                    return { name: t.value || ("Table " + (i + 1)), rows: t.rows || t.artifact?.rows || [] };
+                  }).filter(function (t) { return t.rows.length; });
+                  if (tbls.length) loadTablesAsSheets({ schema: "gx-tables-v1", tables: tbls, meta: gdata.meta });
+                }
+                if (window.__GX_TAFNE_ARTIFACTS__) window.__GX_TAFNE_ARTIFACTS__.refresh();
+                $.toast({ heading: "TAFNE", text: "Received " + gdata.tags.length + " tag(s)",
+                  icon: "success", loader: false, stack: false });
+              }
+            } catch (e) {
+              $.toast({ heading: "TAFNE", text: "Failed to load tags: " + e.message,
+                icon: "error", loader: false, stack: false });
+            }
+            return;
+          }
           if (action !== "load-diagram" && action !== "load-netlist") return;
           var raw;
           try {
@@ -2147,6 +2249,18 @@
             var jsonStr = exportAsJson($tables);
             if (prevId && prevId !== compSheet.id) switchSheet(prevId);
             try {
+              // Provenance assembly is intelligence-layer POLICY (shell-provided
+              // GxProvenance; assets/os/provenance.js) — NOT in this forkable tool.
+              // Standalone/forked → no lineage sent, tool still works. build()
+              // inherits the incoming chain (Schema → TAFNE) and appends this
+              // VALIDATION record.
+              var fullLineage = window.GxProvenance
+                ? window.GxProvenance.build("tifany", CwsContracts.PROVENANCE_STAGES.VALIDATION, {
+                    source: window.activeSheet?.name || "Components",
+                    ops: ["edit", "validate"],
+                    score: null,
+                  })
+                : [];
               var pointerId = await CwsBridge.requestStore(
                 jsonStr,
                 "json-data",
@@ -2160,6 +2274,7 @@
                     suggestedTarget: "svg_wiring",
                     action: "back-annotate",
                   },
+                  provenance: fullLineage,
                 }),
               );
               $.toast({
