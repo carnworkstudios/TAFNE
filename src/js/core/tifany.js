@@ -1194,8 +1194,7 @@ $(function () {
     // When opened via the Ginexys VS Code extension, the extension injects
     // window.__GINEXYS_INITIAL_FILE__ before </body>. Route its content
     // through the existing parser chain so no parsing logic is duplicated.
-    if (window.__GINEXYS_INITIAL_FILE__) {
-        var _gif = window.__GINEXYS_INITIAL_FILE__;
+    function _gxLoadFile(gif) {
         var _extTypeMap = {
             '.csv':  'csv',
             '.tsv':  'csv',
@@ -1203,15 +1202,30 @@ $(function () {
             '.sql':  'sql',
             '.json': 'json',
         };
-        var _inputType = _extTypeMap[_gif.ext] || 'csv';
+        var _inputType = _extTypeMap[gif.ext] || 'csv';
         $('#inputType').val(_inputType);
         if (window.tifanyMonacoInput) {
-            window.tifanyMonacoInput.setValue(_gif.content);
+            window.tifanyMonacoInput.setValue(gif.content);
         } else {
-            $('#tableInput').val(_gif.content);
+            $('#tableInput').val(gif.content);
         }
         if (typeof parseInput === 'function') parseInput();
     }
+
+    if (window.__GINEXYS_INITIAL_FILE__) {
+        _gxLoadFile(window.__GINEXYS_INITIAL_FILE__);
+    }
+
+    // The extension host pushes this when the file changes on disk underneath an
+    // open tab — routine in agent-driven editors, where the agent rewrites the
+    // CSV while the tab is open. Same parser chain as the initial boot.
+    window.addEventListener('message', function (e) {
+        if (!e.data || e.data.__ginexys !== true) { return; }
+        if (e.data.type !== 'ginexys:file-changed') { return; }
+        var p = e.data.payload;
+        if (!p || typeof p.content !== 'string') { return; }
+        _gxLoadFile(p);
+    });
 
     // AI layer: OCR-transcribed table arrives from the OS shell's AI panel
     // (win-ipc-panel AI view → backend /api/v1/ai/ocr → CSV). New sheet per import.
