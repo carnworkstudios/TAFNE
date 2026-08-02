@@ -1216,16 +1216,61 @@ $(function () {
         _gxLoadFile(window.__GINEXYS_INITIAL_FILE__);
     }
 
-    // The extension host pushes this when the file changes on disk underneath an
-    // open tab — routine in agent-driven editors, where the agent rewrites the
-    // CSV while the tab is open. Same parser chain as the initial boot.
-    window.addEventListener('message', function (e) {
-        if (!e.data || e.data.__ginexys !== true) { return; }
-        if (e.data.type !== 'ginexys:file-changed') { return; }
-        var p = e.data.payload;
-        if (!p || typeof p.content !== 'string') { return; }
-        _gxLoadFile(p);
-    });
+    // ── Save back to the VS Code document ────────────────────────────────────
+    // TafneEditorProvider has always handled a `ginexys:save` message, but
+    // nothing in the tool ever sent one — so edits made here never reached the
+    // file. Serialise the current tables in the OPEN FILE's format (not the
+    // export dropdown's, which is a separate user choice) and hand it back.
+    function _gxSerializeForHost(ext) {
+        var $tables = $('#tableContainer table');
+        if (!$tables.length) { return null; }
+        switch ((ext || '').toLowerCase()) {
+            case '.md':
+                return typeof exportAsMarkdown === 'function' ? exportAsMarkdown($tables) : null;
+            case '.sql':
+                return typeof exportAsSql === 'function' ? exportAsSql($tables) : null;
+            case '.json':
+                return typeof exportAsJson === 'function' ? exportAsJson($tables) : null;
+            case '.html':
+                return typeof exportAsHtml === 'function' ? exportAsHtml() : null;
+            case '.csv':
+            case '.tsv':
+            default:
+                // exportAsCsv takes ONE table element, unlike the others.
+                return typeof exportAsCsv === 'function'
+                    ? exportAsCsv(window.currentTable || $tables[0]) : null;
+        }
+    }
+
+    window.__gxSaveToHost = function () {
+        if (!window.CwsBridge?.isEmbedded) { return false; }
+        var ext = (window.__GINEXYS_INITIAL_FILE__ || {}).ext || '.csv';
+        var content;
+        try { content = _gxSerializeForHost(ext); } catch (err) {
+            console.error('[GX] serialise for save failed:', err);
+            content = null;
+        }
+        if (typeof content !== 'string') {
+            if (typeof showToast === 'function') { showToast('Nothing to save yet', 'error'); }
+            return false;
+        }
+        window.CwsBridge.send('ginexys:save', { content: content });
+        if (typeof showToast === 'function') { showToast('Saved to file', 'success'); }
+        return true;
+    };
+
+    // Ctrl/Cmd+S inside the webview saves to the real file. VS Code's own save
+    // keybinding does not reach a custom editor's webview, so without this there
+    // is no way to write from the tool at all.
+    if (window.CwsBridge?.isEmbedded) {
+        window.addEventListener('keydown', function (e) {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault();
+                window.__gxSaveToHost();
+            }
+        });
+    }
+
 
     // AI layer: OCR-transcribed table arrives from the OS shell's AI panel
     // (win-ipc-panel AI view → backend /api/v1/ai/ocr → CSV). New sheet per import.
