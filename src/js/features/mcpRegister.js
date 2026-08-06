@@ -1,5 +1,5 @@
 /* ============================================================
-   TAFNE — GxMCP verb registration (PUBLIC / in-submodule)
+   TAFNE — GxMCP verb registration
    ------------------------------------------------------------
    Declares TAFNE's FULL verb surface so a copilot can do
    everything a user can: table-viewer ops (incl. new sheets,
@@ -13,16 +13,13 @@
    (initAccordions / initSpSelectors in tifanyTabs.js), applied
    via the style panel's applyClassId + a re-init.
 
-   WHY THIS FILE LIVES IN THE SUBMODULE (not root, unlike Schema
-   and PDF): its apply() calls TAFNE's OWN public functions
-   (transposeTable, LabFunctions.*, nodeGraphManager.addNode, …).
-   That is public CAPABILITY + public SHAPE — mutating your own
-   document is not a moat. It carries NO intelligence: turning a
-   prompt into ops is server-side (backend/ai/router.py) + the
-   shell copilot. Schema/PDF registrations live in root ONLY
-   because their apply IS intelligence (auto-placement layout /
-   extraction inference). Placement tracks the IP standard
-   per-tool. See assets/os/mcp.js + architecture/mcp-layer.md.
+   WHAT THIS FILE IS: a MANIFEST. It declares the verbs this tool
+   can perform and maps each to one of the tool's OWN public
+   functions (transposeTable, LabFunctions.*,
+   nodeGraphManager.addNode, …). It carries no model and no
+   prompt handling — turning a prompt into ops happens elsewhere,
+   server-side. Everything here is capability the UI already
+   exposes; the manifest just makes it addressable.
 
    SHEET & MODE ADDRESSING: the user references a sheet as @Name
    and a mode as /table-view /lab-mode /node in the prompt; the

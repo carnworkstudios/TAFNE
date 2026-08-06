@@ -2370,8 +2370,8 @@
         });
 
         // Flow 1 receive: Schema Editor → TAFNE (load-diagram / load-netlist)
-        // Incoming lineage capture is intelligence-layer policy — the shell-
-        // provided GxProvenance module records it (no-op standalone/forked).
+        // Incoming lineage is recorded by an optional host-provided
+        // capability; a no-op when it is not present.
         CwsBridge.onData(async function (envelope) {
           if (window.GxProvenance)
             window.GxProvenance.captureIncoming(envelope);
@@ -2567,11 +2567,9 @@
             var jsonStr = exportAsJson($tables);
             if (prevId && prevId !== compSheet.id) switchSheet(prevId);
             try {
-              // Provenance assembly is intelligence-layer POLICY (shell-provided
-              // GxProvenance; assets/os/provenance.js) — NOT in this forkable tool.
-              // Standalone/forked → no lineage sent, tool still works. build()
-              // inherits the incoming chain (Schema → TAFNE) and appends this
-              // VALIDATION record.
+              // Lineage assembly is an optional host-provided capability. When
+              // absent, no lineage is sent and the tool works as before. build()
+              // inherits any incoming chain and appends this VALIDATION record.
               var fullLineage = window.GxProvenance
                 ? window.GxProvenance.build(
                     "tifany",

@@ -589,7 +589,7 @@ window.saveNodeEditorState = saveNodeEditorState;
 // Theme change listener
 // ──────────────────────────────────────────────────────────────────────────────
 
-// Legacy postMessage format (direct from os-shell.js fallback)
+// Legacy postMessage format (direct host fallback)
 window.addEventListener('message', function (ev) {
     if (ev.data && ev.data.type === 'cws:theme-change' && window.nodeEditorEnabled) {
         window.nodeCanvasRenderer.onThemeChange();
