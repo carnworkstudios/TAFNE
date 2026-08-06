@@ -325,6 +325,11 @@ export class TableEditor {
 
     _createRuler() {
         if (this._ruler) return;
+        const existingWrap = this.table.closest('.tafne-ruler-wrap');
+        if (existingWrap && existingWrap !== this._ruler) {
+            existingWrap.parentNode?.insertBefore(this.table, existingWrap);
+            existingWrap.remove();
+        }
         const wrap = document.createElement('div');
         wrap.className = 'tafne-ruler-wrap';
         this.table.parentNode?.insertBefore(wrap, this.table);
@@ -353,6 +358,16 @@ export class TableEditor {
         this._buildColRuler(colRuler);
         this._buildRowRuler(rowRuler);
         this._ruler = wrap;
+
+        if (window.ResizeObserver) {
+            if (this._resizeObserver) this._resizeObserver.disconnect();
+            this._resizeObserver = new ResizeObserver(() => {
+                this._syncRulerSegments();
+            });
+            this._resizeObserver.observe(this.table);
+        }
+
+        requestAnimationFrame(() => this._syncRulerSegments());
     }
 
     _buildColRuler(container) {
@@ -404,6 +419,74 @@ export class TableEditor {
         container.appendChild(addBtn);
     }
 
+    _syncRulerSegments() {
+        if (!this._ruler || this._isSyncingSegments) return;
+        this._isSyncingSegments = true;
+        try {
+            this.grid = new GridMapper(this.table);
+
+            const colRuler = this._ruler.querySelector('.tafne-col-ruler');
+            const rowRuler = this._ruler.querySelector('.tafne-row-ruler');
+
+            if (colRuler) {
+                const colSegs = colRuler.querySelectorAll('.ruler-seg');
+                const seen = new Array(this.grid.maxCols).fill(false);
+                const widths = new Array(this.grid.maxCols).fill(0);
+
+                this.grid.cellMap.forEach((info, cell) => {
+                    const w = cell.getBoundingClientRect().width;
+                    if (info.colspan === 1 && !seen[info.startCol] && w > 0) {
+                        seen[info.startCol] = true;
+                        widths[info.startCol] = w;
+                    }
+                });
+
+                const validWidths = widths.filter(w => w > 0);
+                const avgWidth = validWidths.length ? validWidths.reduce((a, b) => a + b, 0) / validWidths.length : 80;
+
+                colSegs.forEach((seg) => {
+                    const colIdx = parseInt(seg.dataset.col, 10);
+                    if (isNaN(colIdx)) return;
+                    const w = Math.round(seen[colIdx] ? widths[colIdx] : avgWidth);
+                    const currW = parseFloat(seg.style.width) || 0;
+                    if (Math.abs(currW - w) >= 1) {
+                        seg.style.minWidth = `${w}px`;
+                        seg.style.maxWidth = `${w}px`;
+                        seg.style.width = `${w}px`;
+                        seg.style.flex = `0 0 ${w}px`;
+                    }
+                });
+            }
+
+            if (rowRuler) {
+                const rowSegs = rowRuler.querySelectorAll('.ruler-seg');
+                const trs = Array.from(this.table.querySelectorAll('tr'));
+
+                rowSegs.forEach((seg) => {
+                    const rowIdx = parseInt(seg.dataset.row, 10);
+                    if (isNaN(rowIdx)) return;
+                    const tr = trs[rowIdx];
+                    if (!tr) return;
+                    const h = Math.round(tr.getBoundingClientRect().height);
+                    if (h > 0) {
+                        const currH = parseFloat(seg.style.height) || 0;
+                        if (Math.abs(currH - h) >= 1) {
+                            seg.style.height = `${h}px`;
+                            seg.style.flex = `0 0 ${h}px`;
+                        }
+                        if (seg.style.display !== '') seg.style.display = '';
+                    } else {
+                        if (seg.style.display !== 'none') seg.style.display = 'none';
+                    }
+                });
+            }
+        } finally {
+            requestAnimationFrame(() => {
+                this._isSyncingSegments = false;
+            });
+        }
+    }
+
     _syncRuler() {
         if (!this._ruler) return;
         this.grid = new GridMapper(this.table);
@@ -411,9 +494,14 @@ export class TableEditor {
         const rowRuler = this._ruler.querySelector('.tafne-row-ruler');
         if (colRuler) this._buildColRuler(colRuler);
         if (rowRuler) this._buildRowRuler(rowRuler);
+        requestAnimationFrame(() => this._syncRulerSegments());
     }
 
     _destroyRuler() {
+        if (this._resizeObserver) {
+            this._resizeObserver.disconnect();
+            this._resizeObserver = null;
+        }
         if (!this._ruler) return;
         const parent = this._ruler.parentNode;
         if (parent) parent.insertBefore(this.table, this._ruler);
