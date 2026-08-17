@@ -10,7 +10,7 @@ window._sheetCounter = 0;
  * Add a new sheet with the given name and raw table HTML.
  * Automatically switches to the new sheet.
  */
-function addSheet(name, rawHtml) {
+function addSheet(name, rawHtml, meta) {
     // Save current sheet's container state before switching
     if (window.activeSheetId !== null) {
         _saveActiveSheetState();
@@ -23,7 +23,13 @@ function addSheet(name, rawHtml) {
         id: id,
         name: sheetName,
         rawHtml: rawHtml,
-        containerHtml: null   // populated when switching away from this sheet
+        containerHtml: null,  // populated when switching away from this sheet
+        // Index-aligned with the <table> elements inside rawHtml (generateTabs
+        // stamps them data-tifany-id="t-0", "t-1", … in the same order), so
+        // origins[i] is the exact region table i was extracted from. This is
+        // what makes "send it back to where it came from" addressable instead
+        // of a guess. Null for a sheet authored here with no upstream.
+        origins: (meta && meta.origins) || null,
     });
 
     // Store raw html for decoupled tab count
@@ -66,17 +72,99 @@ function loadNetlistAsSheets(netlist) {
 }
 window.loadNetlistAsSheets = loadNetlistAsSheets;
 
+// Structured gx-tables/2 rows are a cell GRID ({text, colSpan, rowSpan,
+// header}), not flat objects — parseJsonInput can't build this (one <td> per
+// object key, no span attribute it ever writes). This is the other half of
+// the fix: gx-tables-v1 sending a colspan and TAFNE having no path to render
+// one back would have been the same loss with extra steps.
+// Delegates to the shared renderer (`tableRender.js`), which the headless
+// TableDriver loads too. Two implementations of "render a cell grid" would
+// eventually disagree about a merged cell, which is the one thing this tool
+// exists to preserve. The local fallback keeps a forked copy working if the
+// file is not loaded, and it is deliberately the same code, not a simpler one.
+function cellGridToTableHtml(rows) {
+    if (window.GxTableRender) return window.GxTableRender.toHtml(rows).text;
+    var html = '<table class="tablecoil crosshair-table">';
+    (rows || []).forEach(function (row) {
+        html += '<tr>';
+        row.forEach(function (c) {
+            var tag = c.header ? 'th' : 'td';
+            var attrs = '';
+            if (c.colSpan > 1) attrs += ' colspan="' + c.colSpan + '"';
+            if (c.rowSpan > 1) attrs += ' rowspan="' + c.rowSpan + '"';
+            html += '<' + tag + attrs + '>' + _escHtml(c.text) + '</' + tag + '>';
+        });
+        html += '</tr>';
+    });
+    return html + '</table>';
+}
+
 /**
- * Build sheets from a generic gx-tables-v1 payload (Schema Editor BOM/findings,
- * or any tool sending [{ name, rows: [{col: val}] }] tables over CwsBridge).
+ * Build sheets from a gx-tables/2 (or legacy gx-tables-v1) payload — Schema
+ * Editor's BOM/findings, PDF's extracted tables, or any tool sending tables
+ * over CwsBridge. Accepts both schemas via window.GxTables.normalizeEnvelope
+ * (root-injected, private — assets/os/tables.js) so a v1 payload still saved
+ * on someone's disk from before this shipped keeps opening; when GxTables
+ * isn't injected (forked standalone), falls back to the pre-2026-08-14e
+ * flat-object path, which cannot render a merged cell — same limit it always
+ * had, not a new one.
  */
 function loadTablesAsSheets(payload) {
-    var tables = (payload && payload.tables) || [];
-    var added = 0;
-    tables.forEach(function (t) {
+    var normalized = window.GxTables ? window.GxTables.normalizeEnvelope(payload) : null;
+    // normalizeEnvelope passes an already-v2-tagged payload through AS IS — it
+    // does not re-check it, because a payload this tool itself just built (the
+    // send side) is already known-good and re-validating every local call would
+    // be pure overhead. But this function's other caller is CwsBridge: a value
+    // crossing a tool boundary, claiming a schema this receiver is about to
+    // trust enough to write straight into `colspan`/`rowspan` HTML attributes.
+    // validate() is what actually checks colSpan/rowSpan are integers before
+    // any of it reaches cellGridToTableHtml — skipping it here would mean the
+    // structural contract exists but nothing on the receiving end enforces it.
+    if (normalized) {
+        var errs = window.GxTables.validate(normalized);
+        if (errs.length) {
+            $.toast({
+                heading: 'Tables rejected', text: errs[0] + (errs.length > 1 ? ' (+' + (errs.length - 1) + ' more)' : ''),
+                icon: 'error', loader: false, stack: false,
+            });
+            return;
+        }
+    }
+    var tables = normalized ? normalized.tables : ((payload && payload.tables) || []);
+
+    // Group by SOURCE PAGE before creating sheets. TAFNE's model is a sheet per
+    // page that may hold several tables (generateTabs already renders each
+    // <table> as its own accordion card), so four tables selected off page 9
+    // belong on one "Page 9" sheet — not scattered across four unrelated sheets
+    // with nothing left to say they were ever related.
+    //
+    // Tables with no origin (authored elsewhere, or a pre-origin payload) can't
+    // be grouped and each keep their own sheet, which is the old behaviour.
+    var groups = [];
+    var byKey = {};
+    tables.forEach(function (t, i) {
         if (!Array.isArray(t.rows) || !t.rows.length) return;
-        addSheet(t.name || ('Table ' + (window._sheetCounter + 1)),
-            parseJsonInput(JSON.stringify(t.rows)));
+        var page = t.origin && t.origin.page;
+        var key = page != null ? ('page:' + page) : ('solo:' + i);
+        if (!byKey[key]) {
+            byKey[key] = {
+                name: page != null ? ('Page ' + page) : (t.name || null),
+                tables: [],
+                origins: [],
+            };
+            groups.push(byKey[key]);
+        }
+        byKey[key].tables.push(t);
+        byKey[key].origins.push(t.origin || null);
+    });
+
+    var added = 0;
+    groups.forEach(function (g) {
+        var html = g.tables.map(function (t) {
+            return normalized ? cellGridToTableHtml(t.rows) : parseJsonInput(JSON.stringify(t.rows));
+        }).join('');
+        addSheet(g.name || ('Table ' + (window._sheetCounter + 1)), html,
+            { origins: g.origins.some(Boolean) ? g.origins : null });
         added++;
     });
     $.toast({

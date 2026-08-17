@@ -74,6 +74,7 @@
     <script src="/assets/os/contracts.js"></script>
     <script src="/assets/os/mcp.js"></script>
     <script src="/assets/os/bridge.js"></script>
+    <script src="/assets/os/pointer.js"></script>
     <script src="/assets/js/gx-track.js"></script>
 
     <!-- jQuery (must be before Bootstrap JS and TIFANY scripts) -->
@@ -129,6 +130,13 @@
     <script src="src/js/features/tifanyTabs.js"></script>
     <script src="src/js/features/labFunctions.js"></script>
     <script src="src/js/features/labMode.js"></script>
+    <!-- Shared cell-grid renderer. Loaded BEFORE sheetManager, which delegates to
+         it: the headless TableDriver loads the same file, so a merged cell renders
+         identically in the browser and over MCP. -->
+    <script src="src/js/features/tableRender.js"></script>
+    <!-- Node graph -> gx-pipeline/1. Public SHAPE: it walks window.NodeGraph into a
+         declared envelope and decides nothing about what any of it means. -->
+    <script src="src/js/features/pipelineEmit.js"></script>
     <script src="src/js/features/sheetManager.js"></script>
     <script src="src/js/features/nodeRenderer.js"></script>
     <script src="src/js/features/nodeInteractions.js"></script>
@@ -2140,15 +2148,28 @@
           })();
         }
 
-        // OS shell Send card (Pro) → gx:ipc-send. Schema Editor route reuses the
-        // back-annotate pipeline; the PDF card launches/focuses the PDF tool so
-        // its extraction can send tables back here.
+        // OS shell Send card (Pro) → gx:ipc-send.
+        //
+        // Which sheets go where, and in what shape, is cross-tool routing POLICY
+        // and lives in the host-injected artifacts panel — the same policy the
+        // panel's own Send buttons use, so the card and the panel cannot drift
+        // into two different answers. Previously this handler WAS that second
+        // answer: it clicked the electrical netlist button for every domain and
+        // merely launched the PDF tool.
+        //
+        // Guarded: a forked standalone TAFNE never gets the panel injected, so
+        // the pre-panel behaviour stays as the fallback.
         window.addEventListener("message", function (e) {
           if (
             e.origin !== window.location.origin ||
             e.data?.type !== "gx:ipc-send"
           )
             return;
+          var panel = window.__GX_TAFNE_ARTIFACTS__;
+          if (panel && typeof panel.route === "function") {
+            panel.route(e.data.target);
+            return;
+          }
           if (e.data.target === "svg_wiring") {
             var btn = document.getElementById("backAnnotateBtn");
             if (btn) btn.click();
@@ -2258,13 +2279,29 @@
                 ? await CwsBridge.getStore(envelope.pointer)
                 : envelope.inline;
               var tdata = JSON.parse(traw);
-              if (
-                tdata.schema === "gx-tables-v1" &&
-                typeof loadTablesAsSheets === "function"
-              ) {
+              // Accept BOTH wire schemas. gx-tables/2 (assets/os/tables.js,
+              // root-injected) carries per-cell colSpan/rowSpan and a per-table
+              // candidate flag; gx-tables-v1 is the flat legacy shape. This gate
+              // was a hard === "gx-tables-v1" equality, which silently DROPPED a
+              // v2 envelope — loadTablesAsSheets itself normalizes both, so the
+              // dispatcher must not be narrower than the loader it calls.
+              // v2 is only accepted when GxTables is actually present: without it
+              // loadTablesAsSheets has no cell-grid renderer and would fall
+              // through to the flat parser, turning a Cell[][] into columns
+              // named "0","1","2". Refusing is the honest failure; rendering
+              // garbage is not.
+              var tSchema = tdata && tdata.schema;
+              var tKnown =
+                tSchema === "gx-tables-v1" ||
+                (!!window.GxTables && tSchema === window.GxTables.SCHEMA);
+              if (tKnown && typeof loadTablesAsSheets === "function") {
                 loadTablesAsSheets(tdata);
+                // A v2 table states its own trust; v1 could only say it at the
+                // envelope level, so both are consulted.
                 var isCandidate =
-                  action === "load-candidate-tables" || tdata.meta?.candidate;
+                  action === "load-candidate-tables" ||
+                  tdata.meta?.candidate ||
+                  (tdata.tables || []).some(function (t) { return t.candidate; });
                 if (isCandidate) {
                   if (
                     window.GxValidateTags &&

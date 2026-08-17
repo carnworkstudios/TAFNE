@@ -377,18 +377,18 @@ export class TableEditor {
             seg.className = 'ruler-seg';
             seg.textContent = String.fromCharCode(65 + c);
             seg.dataset.col = c;
-            seg.addEventListener('click', () => this.selectColumn(c));
+            window.GxPointer.onPress(seg, () => this.selectColumn(c));
             const del = document.createElement('span');
             del.className = 'ruler-del';
             del.textContent = '\u00D7';
-            del.addEventListener('click', (e) => { e.stopPropagation(); this.selectColumn(c); this.deleteColumn(); });
+            window.GxPointer.onPress(del, (e) => { e.stopPropagation(); this.selectColumn(c); this.deleteColumn(); });
             seg.appendChild(del);
             container.appendChild(seg);
         }
         const addBtn = document.createElement('div');
         addBtn.className = 'ruler-add';
         addBtn.textContent = '+';
-        addBtn.addEventListener('click', () => {
+        window.GxPointer.onPress(addBtn, () => {
             if (this._selectedCells.length) this.addColumn();
         });
         container.appendChild(addBtn);
@@ -402,18 +402,18 @@ export class TableEditor {
             seg.className = 'ruler-seg';
             seg.textContent = String(r + 1);
             seg.dataset.row = r;
-            seg.addEventListener('click', () => this.selectRow(r));
+            window.GxPointer.onPress(seg, () => this.selectRow(r));
             const del = document.createElement('span');
             del.className = 'ruler-del';
             del.textContent = '\u00D7';
-            del.addEventListener('click', (e) => { e.stopPropagation(); this.selectRow(r); this.deleteRow(); });
+            window.GxPointer.onPress(del, (e) => { e.stopPropagation(); this.selectRow(r); this.deleteRow(); });
             seg.appendChild(del);
             container.appendChild(seg);
         });
         const addBtn = document.createElement('div');
         addBtn.className = 'ruler-add';
         addBtn.textContent = '+';
-        addBtn.addEventListener('click', () => {
+        window.GxPointer.onPress(addBtn, () => {
             if (this._selectedCells.length) this.addRow();
         });
         container.appendChild(addBtn);

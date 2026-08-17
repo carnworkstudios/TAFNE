@@ -9,7 +9,7 @@ function initNodePalette() {
     const palette = document.getElementById('nePalette');
     if (!btn || !palette) return;
 
-    btn.addEventListener('click', function (e) {
+    window.GxPointer.onPress(btn, function (e) {
         e.stopPropagation();
         _togglePalette();
     });
@@ -61,7 +61,7 @@ function _buildPalette(palette) {
         const btn = document.createElement('button');
         btn.className = 'ne-palette-item';
         btn.innerHTML = `<span class="ne-palette-icon" style="background:${def.color}">${def.icon}</span><span class="ne-palette-info"><strong>${def.label}</strong><em>${def.description}</em></span>`;
-        btn.addEventListener('click', function () {
+        window.GxPointer.onPress(btn, function () {
             _placeOperatorNode(type);
             _closePalette();
         });

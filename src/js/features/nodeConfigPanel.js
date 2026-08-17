@@ -32,11 +32,11 @@ window.nodeConfigPanel = (function () {
     function init() {
         const panel = _getPanel();
         // Close button
-        panel.addEventListener('click', function (e) {
+        window.GxPointer.onPress(panel, function (e) {
             if (e.target.closest('.ne-config-close')) close();
         });
         // Click outside closes
-        document.addEventListener('mousedown', function (e) {
+        document.addEventListener('pointerdown', function (e) {
             if (_currentNodeId && panel.style.display !== 'none' && !panel.contains(e.target)) {
                 const nodeEl = e.target.closest('.ne-node');
                 const configBtn = e.target.closest('.ne-node-config-btn');
@@ -76,7 +76,7 @@ window.nodeConfigPanel = (function () {
         body.addEventListener('change', () => _updateSchemaPreview(body, node));
         body.addEventListener('input',  () => _updateSchemaPreview(body, node));
 
-        panel.querySelector('#neConfigSave').addEventListener('click', () => _save(node));
+        window.GxPointer.onPress(panel.querySelector('#neConfigSave'), () => _save(node));
     }
 
     // ── Filter config ──────────────────────────────────────────────────────────
@@ -394,11 +394,11 @@ window.nodeConfigPanel = (function () {
 
         // Click a chip to toggle the column in/out of this node's output
         box.querySelectorAll('.ne-schema-col').forEach(chip => {
-            chip.addEventListener('click', function () {
-                const label = this.dataset.colLabel;
+            window.GxPointer.onPress(chip, function () {
+                const label = chip.dataset.colLabel;
                 if (_excludedCols.has(label)) _excludedCols.delete(label);
                 else                          _excludedCols.add(label);
-                this.classList.toggle('ne-schema-col-off');
+                chip.classList.toggle('ne-schema-col-off');
             });
         });
     }

@@ -17,9 +17,9 @@ class NodeInteractionManager {
         this.spaceHeld    = false;
         this.selectedWireId = null;   // wire clicked for deletion
 
-        this._boundMouseDown   = this._onMouseDown.bind(this);
-        this._boundMouseMove   = this._onMouseMove.bind(this);
-        this._boundMouseUp     = this._onMouseUp.bind(this);
+        this._boundPointerDown = this._onPointerDown.bind(this);
+        this._boundPointerMove = this._onPointerMove.bind(this);
+        this._boundPointerUp   = this._onPointerUp.bind(this);
         this._boundWheel       = this._onWheel.bind(this);
         this._boundKeyDown     = this._onKeyDown.bind(this);
         this._boundKeyUp       = this._onKeyUp.bind(this);
@@ -32,21 +32,26 @@ class NodeInteractionManager {
     init(containerEl) {
         this.container = containerEl;
         this.container.addEventListener('wheel',       this._boundWheel,       { passive: false });
-        this.container.addEventListener('mousedown',   this._boundMouseDown);
+        // Pointer events: mouse + touch + stylus. Move/up stay on document so
+        // gestures tracked outside the canvas keep working and `e.target` on
+        // pointerup is the real element under the pointer (wire completion).
+        this.container.addEventListener('pointerdown', this._boundPointerDown);
         this.container.addEventListener('contextmenu', this._boundContextMenu);
-        document.addEventListener('mousemove', this._boundMouseMove);
-        document.addEventListener('mouseup',   this._boundMouseUp);
-        document.addEventListener('keydown',   this._boundKeyDown);
-        document.addEventListener('keyup',     this._boundKeyUp);
+        document.addEventListener('pointermove', this._boundPointerMove);
+        document.addEventListener('pointerup',   this._boundPointerUp);
+        document.addEventListener('pointercancel', this._boundPointerUp);
+        document.addEventListener('keydown',     this._boundKeyDown);
+        document.addEventListener('keyup',       this._boundKeyUp);
     }
 
     destroy() {
         if (!this.container) return;
         this.container.removeEventListener('wheel',       this._boundWheel);
-        this.container.removeEventListener('mousedown',   this._boundMouseDown);
+        this.container.removeEventListener('pointerdown', this._boundPointerDown);
         this.container.removeEventListener('contextmenu', this._boundContextMenu);
-        document.removeEventListener('mousemove', this._boundMouseMove);
-        document.removeEventListener('mouseup',   this._boundMouseUp);
+        document.removeEventListener('pointermove', this._boundPointerMove);
+        document.removeEventListener('pointerup',   this._boundPointerUp);
+        document.removeEventListener('pointercancel', this._boundPointerUp);
         document.removeEventListener('keydown',   this._boundKeyDown);
         document.removeEventListener('keyup',     this._boundKeyUp);
         this._dismissPortMenu();
@@ -97,9 +102,10 @@ class NodeInteractionManager {
 
     // ── Mouse Down ──────────────────────────────────────────────────────────────
 
-    _onMouseDown(e) {
-        // Ignore right-click context for now
-        if (e.button === 2) return;
+    _onPointerDown(e) {
+        // Right-click excluded (context menu owns it); touch/pen report button 0.
+        // Middle-click (button 1) is preserved for pan below.
+        if (e.button === 2 || e.isPrimary === false) return;
 
         const target = e.target;
 
@@ -208,9 +214,10 @@ class NodeInteractionManager {
         }
     }
 
-    // ── Mouse Move ──────────────────────────────────────────────────────────────
+    // ── Pointer Move ─────────────────────────────────────────────────────────────
 
-    _onMouseMove(e) {
+    _onPointerMove(e) {
+        if (e.isPrimary === false) return;   // secondary touches don't move things
         if (this.isPanning) {
             const vp = window.NodeGraph.viewport;
             vp.x = this.panStart.vpX + (e.clientX - this.panStart.x);
@@ -248,9 +255,10 @@ class NodeInteractionManager {
         }
     }
 
-    // ── Mouse Up ────────────────────────────────────────────────────────────────
+    // ── Pointer Up ───────────────────────────────────────────────────────────────
 
-    _onMouseUp(e) {
+    _onPointerUp(e) {
+        if (e.isPrimary === false) return;
         if (this.isPanning) {
             this.isPanning = false;
             if (this.container) this.container.style.cursor = this.spaceHeld ? 'grab' : '';
@@ -608,7 +616,7 @@ class NodeInteractionManager {
             item.className   = 'ne-port-menu-item';
             item.setAttribute('role', 'menuitem');
             item.innerHTML   = `<span class="ne-port-menu-icon" style="background:${def.color}">${def.icon}</span><span>${def.label}</span>`;
-            item.addEventListener('mousedown', (e) => {
+            item.addEventListener('pointerdown', (e) => {
                 e.stopPropagation();
                 this._spawnConnectedNode(type, sourceNodeId, sourcePortId);
                 this._dismissPortMenu();
@@ -652,7 +660,7 @@ class NodeInteractionManager {
                 item.className = 'ne-port-menu-item';
                 item.setAttribute('role', 'menuitem');
                 item.innerHTML = `<span class="ne-port-menu-icon" style="background:${def.color}">${def.icon}</span><span>${t.label}</span>`;
-                item.addEventListener('mousedown', (e) => {
+                item.addEventListener('pointerdown', (e) => {
                     e.stopPropagation();
                     window.nodeGraphManager.addWire(sourceNodeId, sourcePortId, t.nodeId, t.portId);
                     if (typeof window.renderNodeDom === 'function') {
@@ -678,14 +686,14 @@ class NodeInteractionManager {
         menu.style.left = Math.min(clientX, vw - mw - 8) + 'px';
         menu.style.top  = Math.min(clientY, vh - mh - 8) + 'px';
 
-        // Dismiss on outside click
+        // Dismiss on outside press
         const dismiss = (e) => {
             if (!menu.contains(e.target)) {
                 this._dismissPortMenu();
-                document.removeEventListener('mousedown', dismiss);
+                document.removeEventListener('pointerdown', dismiss);
             }
         };
-        setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
+        setTimeout(() => document.addEventListener('pointerdown', dismiss), 0);
     }
 
     _dismissPortMenu() {

@@ -52,6 +52,7 @@
     position: relative;
     overflow: hidden;
     cursor: default;
+    touch-action: none; /* pan / node drag / wire drag must own the gesture */
 }
 
 /* Space-bar grab cursor applied via JS */

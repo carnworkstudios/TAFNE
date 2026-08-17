@@ -1098,6 +1098,7 @@ body.draw-mode-active .tifany-center-panel {
     justify-content: center;
     transition: background 120ms ease;
     z-index: 2;
+    touch-action: none;
 }
 
 /* Three-dot grip indicator */

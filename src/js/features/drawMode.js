@@ -536,23 +536,15 @@ function initDrawCanvas() {
             if (window.tifanyMonacoDraw) window.tifanyMonacoDraw.layout();
         }
 
-        // Mouse
-        handle.addEventListener('mousedown', function (e) {
-            if (e.button !== 0) return;
+        // Pointer events cover mouse + touch + stylus (touchstart/touchend
+        // removed — they double-fired alongside pointerdown/up on touch).
+        handle.addEventListener('pointerdown', function (e) {
+            if (e.button !== 0 || e.isPrimary === false) return;
             beginDrag(e.clientY);
             e.preventDefault();
         });
-        document.addEventListener('mousemove', function (e) { moveDrag(e.clientY); });
-        document.addEventListener('mouseup',   endDrag);
-
-        // Touch (tablet support)
-        handle.addEventListener('touchstart', function (e) {
-            beginDrag(e.touches[0].clientY);
-            e.preventDefault();
-        }, { passive: false });
-        document.addEventListener('touchmove', function (e) {
-            if (dragging) { moveDrag(e.touches[0].clientY); e.preventDefault(); }
-        }, { passive: false });
-        document.addEventListener('touchend', endDrag);
+        document.addEventListener('pointermove', function (e) { if (e.isPrimary === false) return; moveDrag(e.clientY); });
+        document.addEventListener('pointerup',   endDrag);
+        document.addEventListener('pointercancel', endDrag);
     })();
 }
