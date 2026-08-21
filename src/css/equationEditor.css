@@ -1,0 +1,286 @@
+/* ==========================================================================
+   Equation Editor — full-canvas LaTeX mode + inline cell math.
+   Mirrors the Node Editor / Lab Mode canvas shape (see nodeEditor.css) so a
+   third mode does not read as a different application.
+   ========================================================================== */
+
+/* ── Canvas shell ───────────────────────────────────────────────────────── */
+
+.equation-canvas {
+    display: none;                 /* enableEquationEditor() flips this to flex */
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    background: var(--panel-bg, #1e293b);
+    color: var(--text, #e2e8f0);
+    overflow: hidden;
+}
+
+.equation-canvas-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color, rgba(148, 163, 184, 0.2));
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.equation-canvas-header > span:first-child {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.equation-canvas-header-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+}
+
+.equation-canvas-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 260px 1fr;
+}
+
+/* ── Left rail: the equation list ───────────────────────────────────────── */
+
+.eq-list {
+    border-right: 1px solid var(--border-color, rgba(148, 163, 184, 0.2));
+    overflow-y: auto;
+    padding: 8px;
+    min-height: 0;
+}
+
+.eq-item {
+    position: relative;
+    padding: 8px 26px 8px 10px;
+    margin-bottom: 6px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    cursor: pointer;
+    background: rgba(148, 163, 184, 0.06);
+}
+
+.eq-item:hover { background: rgba(148, 163, 184, 0.12); }
+.eq-item.active { border-color: #2563eb; background: rgba(37, 99, 235, 0.14); }
+
+.eq-item-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 5px;
+}
+
+.eq-item-name {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.eq-badge {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 9px;
+    letter-spacing: 0.03em;
+    padding: 1px 5px;
+    border-radius: 7px;
+    background: rgba(148, 163, 184, 0.2);
+    opacity: 0.85;
+}
+
+/* The thumbnail is a preview, not a reading surface: it scrolls rather than
+   wrapping, because a wrapped equation is a misleading picture of one. */
+.eq-item-thumb {
+    font-size: 13px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+}
+
+.eq-item-del {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    border: none;
+    background: none;
+    color: inherit;
+    opacity: 0.35;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 2px 4px;
+}
+
+.eq-item-del:hover { opacity: 1; color: #f87171; }
+
+/* ── Right pane: source above, preview below ────────────────────────────── */
+
+.eq-work {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    min-height: 0;
+    min-width: 0;
+}
+
+.eq-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px 0;
+}
+
+.eq-meta label { font-size: 11px; opacity: 0.7; }
+
+.eq-meta input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(148, 163, 184, 0.1);
+    border: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+    border-radius: 6px;
+    color: inherit;
+    font-size: 12px;
+    padding: 5px 8px;
+}
+
+.eq-source-wrap { padding: 8px 12px 0; min-height: 0; }
+
+#eqSource {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+    border-radius: 7px;
+    color: inherit;
+    padding: 9px 11px;
+    font: 13px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    tab-size: 2;
+}
+
+#eqSource:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+}
+
+.eq-error {
+    display: none;
+    margin: 6px 12px 0;
+    padding: 6px 9px;
+    border-radius: 6px;
+    background: rgba(248, 113, 113, 0.12);
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    color: #fca5a5;
+    font: 11px/1.45 ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+}
+
+/* KaTeX renders on a transparent ground and inherits colour, so a preview on
+   the dark panel would be dark-on-dark. It gets its own light surface — the
+   same decision the artifact previews make, and for the same reason: this is
+   what the equation will look like in a document. */
+.eq-preview {
+    margin: 10px 12px;
+    padding: 18px 14px;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #111827;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    overflow: auto;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.eq-preview.eq-math-error { background: #fff7f7; border-color: rgba(248, 113, 113, 0.5); }
+
+.eq-empty {
+    opacity: 0.5;
+    font-size: 12px;
+    text-align: center;
+    padding: 18px 10px;
+}
+
+.eq-raw-tex {
+    margin: 0;
+    font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    opacity: 0.85;
+}
+
+/* ── Symbol palette ─────────────────────────────────────────────────────── */
+
+.eq-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 12px 12px;
+    border-top: 1px solid var(--border-color, rgba(148, 163, 184, 0.2));
+    max-height: 34vh;
+    overflow-y: auto;
+}
+
+.eq-pal-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+
+.eq-pal-label {
+    width: 100%;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    margin-bottom: 2px;
+}
+
+.eq-pal-btn {
+    min-width: 30px;
+    height: 28px;
+    padding: 0 7px;
+    border: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+    border-radius: 6px;
+    background: rgba(148, 163, 184, 0.08);
+    color: inherit;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+}
+
+.eq-pal-btn:hover { background: rgba(37, 99, 235, 0.22); border-color: #2563eb; }
+.eq-pal-btn:active { transform: translateY(1px); }
+
+/* ── Inline cell math ───────────────────────────────────────────────────── */
+
+/* Math sits on the cell's own baseline and inherits its colour, so a table of
+   formulas reads as a table rather than as a strip of pasted images. */
+.eq-math {
+    display: inline-block;
+    vertical-align: middle;
+    max-width: 100%;
+    overflow-x: auto;
+    color: inherit;
+}
+
+.eq-math .katex { color: inherit; }
+
+/* A cell whose TeX does not compile is marked, never hidden: the source is
+   still shown (renderLatex falls back to it) and the underline says the tool
+   could not typeset it rather than pretending it did. */
+.eq-math-error {
+    text-decoration: underline wavy rgba(248, 113, 113, 0.8);
+    text-underline-offset: 3px;
+}
+
+@media (max-width: 900px) {
+    .equation-canvas-body { grid-template-columns: 1fr; grid-template-rows: 34vh 1fr; }
+    .eq-list { border-right: none; border-bottom: 1px solid var(--border-color, rgba(148, 163, 184, 0.2)); }
+}

@@ -509,8 +509,22 @@
     }
 
     function wireGestures() {
-        // Border edges → move
-        $overlay.on('mousedown', '.tf-sel-edge', function (e) { beginGesture('move', e); });
+        // Border edges → move, but ONLY on the second press of a double-click.
+        //
+        // The border hit-frame surrounds the entire selection, so a plain
+        // press-and-drag anywhere near the selection's edge started moving the
+        // block. That is the same gesture as "click a cell and drag to extend a
+        // selection", and it fired far more often by accident than on purpose:
+        // a single stray drag overwrote the target cells.
+        //
+        // e.detail is the click count the browser already tracks, so the second
+        // mousedown of a double-click reads 2. Requiring it means a move is
+        // always deliberate, and the double-click-then-drag gesture is
+        // untouched — it is now the only way in.
+        $overlay.on('mousedown', '.tf-sel-edge', function (e) {
+            if (e.detail < 2) return;   // single press: let the click fall through
+            beginGesture('move', e);
+        });
         // Edge nodes → stretch span (colspan/rowspan grows toward the drag)
         $overlay.on('mousedown', '.tf-sel-node', function (e) { beginGesture('span', e, $(this).attr('data-edge')); });
         // Corner → fill/duplicate

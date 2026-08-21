@@ -48,8 +48,15 @@ window.tableRuler = (function () {
             }
             if (info.colspan === 1 && !seen[info.startCol] && w > 0) {
                 seen[info.startCol] = true;
+                // A pinned column's authority is its <col> width, not the rect:
+                // mid-drag the rect lags a frame behind and the ruler visibly
+                // trails the boundary the user is holding.
+                const pinned = table.querySelector('colgroup.tf-colgroup');
+                const declared = pinned && pinned.children[info.startCol]
+                    ? parseFloat(pinned.children[info.startCol].style.width) : 0;
+                const use = declared || w;
                 $colSegs.filter(`[data-col="${info.startCol}"]`)
-                    .css({ 'min-width': w + 'px', 'max-width': w + 'px', width: w + 'px', display: '' });
+                    .css({ 'min-width': use + 'px', 'max-width': use + 'px', width: use + 'px', display: '' });
             }
         });
         // Unseen cols: hide segment if the whole column is hidden, else average fallback
@@ -62,6 +69,201 @@ window.tableRuler = (function () {
             } else {
                 $(this).css({ 'min-width': avg + 'px', 'max-width': avg + 'px', width: avg + 'px', display: '' });
             }
+        });
+    }
+
+    // ── Column / row sizing ───────────────────────────────────────────────────
+    //
+    // The grid was `width: 100%` + `table-layout: auto`, which means the browser
+    // decides every column width from its content and re-decides on every
+    // keystroke. Nothing could be sized: a width you set was a suggestion auto
+    // layout overrode, columns jumped as you typed, and one long value blew the
+    // rest of the grid out of shape. That is the rigidity — the table looks
+    // structured and cannot actually be shaped.
+    //
+    // A spreadsheet is auto UNTIL you take control, then it is exactly what you
+    // set. So the first resize pins every column at the width it currently has,
+    // switches the table to `table-layout: fixed`, and sets an explicit table
+    // width. From then on a column is a number the user owns.
+    //
+    // Widths live in a <colgroup>, which is invisible to GridMapper (it walks
+    // <tr>) and to the cell selection model, so merged cells and spans are
+    // unaffected.
+
+    const MIN_COL_PX = 24;
+    const MIN_ROW_PX = 18;
+
+    function _isPinned(table) {
+        return table.getAttribute('data-tf-sized') === '1';
+    }
+
+    /** Freeze the current auto layout into explicit per-column widths. */
+    function _pinColumns(table) {
+        if (_isPinned(table)) return table.querySelector('colgroup.tf-colgroup');
+        const mapper = new window.VisualGridMapper(table);
+        const widths = new Array(mapper.maxCols).fill(0);
+
+        // Measure BEFORE anything changes, or the pin captures a layout that is
+        // already reacting to the pin.
+        mapper.cellMap.forEach((info, cell) => {
+            if (info.colspan !== 1) return;
+            const w = cell.getBoundingClientRect().width;
+            if (w > widths[info.startCol]) widths[info.startCol] = w;
+        });
+        for (let i = 0; i < widths.length; i++) {
+            if (!widths[i]) widths[i] = 80;
+        }
+
+        const cg = document.createElement('colgroup');
+        cg.className = 'tf-colgroup';
+        widths.forEach(w => {
+            const col = document.createElement('col');
+            col.style.width = Math.round(w) + 'px';
+            cg.appendChild(col);
+        });
+        table.insertBefore(cg, table.firstChild);
+
+        table.style.tableLayout = 'fixed';
+        table.style.width = Math.round(widths.reduce((a, b) => a + b, 0)) + 'px';
+        table.setAttribute('data-tf-sized', '1');
+        return cg;
+    }
+
+    /** Hand the grid back to the browser. */
+    function releaseSizing(table) {
+        const cg = table.querySelector('colgroup.tf-colgroup');
+        if (cg) cg.remove();
+        table.style.tableLayout = '';
+        table.style.width = '';
+        table.removeAttribute('data-tf-sized');
+        Array.from(table.rows).forEach(r => { r.style.height = ''; });
+        renderTableRulers(table);
+    }
+
+    function _setColWidth(table, colIdx, px) {
+        const cg = _pinColumns(table);
+        const col = cg && cg.children[colIdx];
+        if (!col) return;
+        col.style.width = Math.max(MIN_COL_PX, Math.round(px)) + 'px';
+        let total = 0;
+        Array.from(cg.children).forEach(c => { total += parseFloat(c.style.width) || 0; });
+        table.style.width = Math.round(total) + 'px';
+    }
+
+    function _colWidth(table, colIdx) {
+        const cg = table.querySelector('colgroup.tf-colgroup');
+        if (cg && cg.children[colIdx]) return parseFloat(cg.children[colIdx].style.width) || 0;
+        const mapper = new window.VisualGridMapper(table);
+        let w = 0;
+        mapper.cellMap.forEach((info, cell) => {
+            if (info.colspan === 1 && info.startCol === colIdx) {
+                w = Math.max(w, cell.getBoundingClientRect().width);
+            }
+        });
+        return w;
+    }
+
+    /**
+     * Width of the widest content in a column, so a double-click on the
+     * boundary fits the column to it (the Excel gesture).
+     *
+     * Measured by cloning one cell's text into an off-screen span with the
+     * cell's own font, because a pinned cell's rect is the pinned width and
+     * tells you nothing about what is inside it.
+     */
+    function _autoFitWidth(table, colIdx) {
+        const mapper = new window.VisualGridMapper(table);
+        const probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;left:-9999px;top:-9999px;';
+        document.body.appendChild(probe);
+        let widest = MIN_COL_PX;
+        mapper.cellMap.forEach((info, cell) => {
+            if (info.colspan !== 1 || info.startCol !== colIdx) return;
+            const cs = getComputedStyle(cell);
+            probe.style.font = cs.font;
+            probe.textContent = cell.textContent || '';
+            const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + 2;
+            widest = Math.max(widest, probe.getBoundingClientRect().width + pad);
+        });
+        probe.remove();
+        return Math.ceil(widest);
+    }
+
+    function _setRowHeight(table, rowIdx, px) {
+        const rows = Array.from(table.rows).filter(r =>
+            !r.classList.contains('tifany-drag-row') && !r.classList.contains('drop-indicator-row'));
+        const row = rows[rowIdx];
+        if (row) row.style.height = Math.max(MIN_ROW_PX, Math.round(px)) + 'px';
+    }
+
+    /**
+     * Wire the drag grips that sit on each segment's trailing border.
+     *
+     * The grip is a child of the segment, so it has to stop the mousedown from
+     * reaching the segment's own select/reorder handler.
+     */
+    function _wireResize($wrap, table) {
+        let drag = null;
+
+        const stop = () => {
+            if (!drag) return;
+            $('body').removeClass('tf-resizing-col tf-resizing-row');
+            drag = null;
+            $(document).off('mousemove.tfresize mouseup.tfresize');
+            requestAnimationFrame(() => {
+                _syncRulerSegments($wrap[0], table);
+                if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
+                if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+            });
+        };
+
+        const move = (e) => {
+            if (!drag) return;
+            if (drag.axis === 'col') {
+                _setColWidth(table, drag.index, drag.start + (e.clientX - drag.origin));
+            } else {
+                _setRowHeight(table, drag.index, drag.start + (e.clientY - drag.origin));
+            }
+            _syncRulerSegments($wrap[0], table);
+        };
+
+        // Bound on the ruler containers, not on the wrap: the segment handlers
+        // are delegated from those same containers and stop propagation, so a
+        // wrap-level listener is never reached.
+        $wrap.find('.tafne-col-ruler-vp, .tafne-row-ruler').on('mousedown', '.ruler-grip', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const $seg = $(this).closest('.ruler-seg');
+            const axis = $(this).hasClass('ruler-grip-col') ? 'col' : 'row';
+            const index = parseInt($seg.attr(axis === 'col' ? 'data-col' : 'data-row'), 10);
+            if (isNaN(index)) return;
+            drag = {
+                axis, index,
+                origin: axis === 'col' ? e.clientX : e.clientY,
+                start: axis === 'col'
+                    ? _colWidth(table, index)
+                    : $seg[0].getBoundingClientRect().height,
+            };
+            $('body').addClass('tf-resizing-' + axis);
+            $(document).on('mousemove.tfresize', move).on('mouseup.tfresize', stop);
+        });
+
+        // Double-click a column boundary → fit the column to its content.
+        $wrap.find('.tafne-col-ruler-vp').on('dblclick', '.ruler-grip-col', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const idx = parseInt($(this).closest('.ruler-seg').attr('data-col'), 10);
+            if (isNaN(idx)) return;
+            _setColWidth(table, idx, _autoFitWidth(table, idx));
+            _syncRulerSegments($wrap[0], table);
+            if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+        });
+
+        // Double-click the corner → release every pin, back to content-fit.
+        $wrap.on('dblclick', '.tafne-corner', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (_isPinned(table)) releaseSizing(table);
         });
     }
 
@@ -319,12 +521,14 @@ window.tableRuler = (function () {
         const pillLabel = _pillLabel();
 
         // Build segments without fixed sizes — _syncRulerSegments sets them after DOM insertion
+        // Each segment carries a grip on its trailing border: drag to size the
+        // column/row, double-click a column grip to fit it to its content.
         const colSegs = Array.from({ length: nCols }, (_, i) =>
-            `<div class="ruler-seg" data-col="${i}" title="Col ${i + 1}">${i + 1}<span class="ruler-insert-pill" data-col="${i}" title="${_pillColTitle()}">${pillLabel}</span></div>`
+            `<div class="ruler-seg" data-col="${i}" title="Col ${i + 1}">${i + 1}<span class="ruler-insert-pill" data-col="${i}" title="${_pillColTitle()}">${pillLabel}</span><span class="ruler-grip ruler-grip-col" title="Drag to resize · double-click to fit"></span></div>`
         ).join('');
 
         const rowSegs = Array.from({ length: nRows }, (_, i) =>
-            `<div class="ruler-seg" data-row="${i}" title="Row ${i + 1}">${i + 1}<span class="ruler-insert-pill" data-row="${i}" title="${_pillRowTitle()}">${pillLabel}</span></div>`
+            `<div class="ruler-seg" data-row="${i}" title="Row ${i + 1}">${i + 1}<span class="ruler-insert-pill" data-row="${i}" title="${_pillRowTitle()}">${pillLabel}</span><span class="ruler-grip ruler-grip-row" title="Drag to resize"></span></div>`
         ).join('');
 
         // Assemble wrapper:
@@ -351,6 +555,8 @@ window.tableRuler = (function () {
 
         // Sync segment sizes after the browser has laid out the new DOM
         requestAnimationFrame(() => _syncRulerSegments($wrap[0], table));
+
+        _wireResize($wrap, table);
 
         // Sync horizontal scroll: table-vp → col-ruler-vp
         const tableVp    = $wrap.find('.tafne-table-vp')[0];
@@ -463,11 +669,35 @@ window.tableRuler = (function () {
         // If mouse moves > DRAG_THRESHOLD_PX before mouseup  → reorder drag
         // If mouseup without threshold crossed               → select (shift extends)
         $wrap.find('.tafne-row-ruler').on('mousedown', '.ruler-seg', function (e) {
+            // A press that started on a resize grip is a resize, not a
+            // row/column select-or-reorder. Both handlers are delegated from
+            // this same container and this one calls stopPropagation, so
+            // without this the grip never sees its own mousedown.
+            if ($(e.target).hasClass('ruler-grip')) return;
+
             if (e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
 
             const rowIdx  = parseInt($(this).attr('data-row'), 10);
+
+            // A single press selects. It does NOT arm a reorder.
+            //
+            // Selecting a row and dragging a row are the same opening gesture,
+            // so a press that wandered a few pixels past the threshold -- which
+            // is most presses -- silently reordered the table instead of
+            // selecting it. Reorder is destructive and select is not, so the
+            // ambiguity only ever resolved the wrong way.
+            //
+            // e.detail is the click count the browser already tracks: the
+            // second mousedown of a double-click reads 2. Requiring it makes
+            // double-click-then-drag the only way into a reorder, matching the
+            // selection-move gesture in cellHandles.js.
+            if (e.detail < 2) {
+                _handleRulerRowClick($wrap, table, rowIdx, e);
+                return;
+            }
+
             const startY  = e.clientY;
             let   dragging = false;
 
@@ -480,9 +710,6 @@ window.tableRuler = (function () {
             }
             function onUp() {
                 $(document).off('mousemove.rulerrowintent mouseup.rulerrowintent');
-                if (!dragging) {
-                    _handleRulerRowClick($wrap, table, rowIdx, e);
-                }
             }
             $(document).on('mousemove.rulerrowintent', onMove)
                        .one('mouseup.rulerrowintent', onUp);
@@ -490,11 +717,25 @@ window.tableRuler = (function () {
 
         // ── Col ruler: same threshold pattern ────────────────────────────────────
         $wrap.find('.tafne-col-ruler-vp').on('mousedown', '.ruler-seg', function (e) {
+            // A press that started on a resize grip is a resize, not a
+            // row/column select-or-reorder. Both handlers are delegated from
+            // this same container and this one calls stopPropagation, so
+            // without this the grip never sees its own mousedown.
+            if ($(e.target).hasClass('ruler-grip')) return;
+
             if (e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
 
             const colIdx  = parseInt($(this).attr('data-col'), 10);
+
+            // Single press selects, never reorders. See the row handler above
+            // for why the reorder is gated behind the second press.
+            if (e.detail < 2) {
+                _handleRulerColClick($wrap, table, colIdx, e);
+                return;
+            }
+
             const startX  = e.clientX;
             let   dragging = false;
 
@@ -507,9 +748,6 @@ window.tableRuler = (function () {
             }
             function onUp() {
                 $(document).off('mousemove.rulercolintent mouseup.rulercolintent');
-                if (!dragging) {
-                    _handleRulerColClick($wrap, table, colIdx, e);
-                }
             }
             $(document).on('mousemove.rulercolintent', onMove)
                        .one('mouseup.rulercolintent', onUp);
@@ -634,9 +872,10 @@ window.tableRuler = (function () {
         }
     }
 
-    return { renderTableRulers, highlightRuler, destroyRulers };
+    return { renderTableRulers, highlightRuler, destroyRulers, releaseSizing };
 })();
 
 window.renderTableRulers = window.tableRuler.renderTableRulers;
 window.highlightRuler    = window.tableRuler.highlightRuler;
 window.destroyRulers     = window.tableRuler.destroyRulers;
+window.releaseTableSizing = window.tableRuler.releaseSizing;

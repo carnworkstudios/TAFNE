@@ -691,6 +691,62 @@ tr.accordion-header.actives > td {
     transition: background 0.1s, color 0.1s;
 }
 
+/* ── Resize grips ────────────────────────────────────────────────────────────
+   A grab strip on each segment's trailing border. Wider than the 1px border it
+   sits on, because a 1px target is not a target. */
+.ruler-grip {
+    position: absolute;
+    z-index: 3;
+}
+
+.ruler-grip-col {
+    top: 0;
+    bottom: 0;
+    right: -3px;
+    width: 7px;
+    cursor: col-resize;
+}
+
+.ruler-grip-row {
+    left: 0;
+    right: 0;
+    bottom: -3px;
+    height: 7px;
+    cursor: row-resize;
+}
+
+.ruler-grip::after {
+    content: '';
+    position: absolute;
+    background: var(--t-primary);
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+
+.ruler-grip-col::after { top: 0; bottom: 0; left: 2px; width: 2px; }
+.ruler-grip-row::after { left: 0; right: 0; top: 2px; height: 2px; }
+
+.ruler-grip:hover::after { opacity: 0.85; }
+
+/* While a boundary is held, nothing else on the page should select or hover,
+   and the cursor must match the axis being dragged wherever the pointer goes. */
+body.tf-resizing-col,
+body.tf-resizing-col *,
+body.tf-resizing-row,
+body.tf-resizing-row * {
+    user-select: none !important;
+}
+
+body.tf-resizing-col, body.tf-resizing-col * { cursor: col-resize !important; }
+body.tf-resizing-row, body.tf-resizing-row * { cursor: row-resize !important; }
+
+/* A sized grid says so: the corner marks that widths are pinned, and
+   double-clicking it releases them. */
+.tafne-ruler-wrap:has(> .tafne-ruler-body table[data-tf-sized]) .tafne-corner {
+    color: var(--t-primary);
+    border-bottom-color: var(--t-primary);
+}
+
 /* Hover */
 .tafne-col-ruler .ruler-seg:hover,
 .tafne-row-ruler .ruler-seg:hover {
@@ -767,20 +823,24 @@ tr.accordion-header.actives > td {
     pointer-events: auto;
 }
 
-/* Row ruler pill: sits at the bottom centre of the row segment */
+/* Row ruler pill: bottom centre, but INSIDE the segment.
+   It used to straddle the boundary at bottom:-7px, which is exactly where the
+   resize grip now lives — two affordances fighting for the same 7px, and the
+   pill won because it paints later. Sitting just inside still reads as
+   "insert after this row" and leaves the boundary to the grip. */
 .tafne-row-ruler .ruler-seg .ruler-insert-pill {
     width: 14px;
     height: 14px;
-    bottom: -7px;
+    bottom: 3px;
     left: 50%;
     transform: translateX(-50%);
 }
 
-/* Col ruler pill: sits at the right centre of the col segment */
+/* Col ruler pill: right centre, but INSIDE the segment — see the row pill. */
 .tafne-col-ruler .ruler-seg .ruler-insert-pill {
     width: 14px;
     height: 14px;
-    right: -7px;
+    right: 3px;
     top: 50%;
     transform: translateY(-50%);
 }
@@ -805,10 +865,15 @@ tr.accordion-header.actives > td {
    resolves to the cell underneath. */
 .tf-sel-overlay.tf-gesturing { pointer-events: none; }
 
-/* Border hit-frame — four thin strips that trigger MOVE. */
+/* Border hit-frame — four thin strips that trigger MOVE on a DOUBLE-click drag.
+   A single press deliberately falls through to the cell underneath, so the
+   cursor must not promise a drag that a single press will not start. */
 .tf-sel-edge {
     position: absolute;
     pointer-events: auto;
+    cursor: cell;
+}
+.tf-sel-edge:active {
     cursor: move;
 }
 .tf-sel-edge-top    { top: -3px;    left: 0;      right: 0;     height: 7px; }
@@ -947,4 +1012,78 @@ body.tf-no-select { user-select: none; -webkit-user-select: none; }
     font-size: 11px;
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
     color: var(--t-text-muted, #57606a);
+}
+
+/* ── SPREADSHEET GRID ────────────────────────────────────────────────────────
+   The editor's own grid, borrowing the density of .lab-result-table (compact
+   padding, crisp 1px borders, sticky header) so it reads as a sheet rather
+   than as a rounded content card.
+
+   Scoped to .tafne-ruler-wrap on purpose: .tablecoil is also the class the
+   document exporters emit, and an exported table should keep its document
+   styling. This is how the table looks while you are EDITING it. */
+.tafne-ruler-wrap .tablecoil {
+    width: auto;
+    min-width: 100%;
+    border-collapse: collapse;
+    border: none;
+    border-radius: 0;
+    table-layout: auto;
+    font-size: 12px;
+}
+
+/* A sized grid is exactly as wide as its columns say and no wider, so a narrow
+   sheet stops stretching to fill the pane. */
+.tafne-ruler-wrap .tablecoil[data-tf-sized] {
+    min-width: 0;
+}
+
+.tafne-ruler-wrap .tablecoil th,
+.tafne-ruler-wrap .tablecoil td {
+    border: 1px solid var(--t-border);
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: top;
+    border-radius: 0 !important;
+}
+
+/* A pinned column has a width to honour, so its content must wrap or clip
+   instead of forcing the column back open. */
+.tafne-ruler-wrap .tablecoil[data-tf-sized] th,
+.tafne-ruler-wrap .tablecoil[data-tf-sized] td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+}
+
+.tafne-ruler-wrap .tablecoil thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--t-bg-surface);
+    border-bottom: 1px solid var(--t-border);
+    padding: 5px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/* The rounded-corner rules above are decorative on a content card and wrong on
+   a sheet: they clipped the first and last cell of every edge row. */
+.tafne-ruler-wrap .tablecoil tr:first-child > th:first-child,
+.tafne-ruler-wrap .tablecoil tr:first-child > th:last-child,
+.tafne-ruler-wrap .tablecoil tr:last-child > td:first-child,
+.tafne-ruler-wrap .tablecoil tr:last-child > td:last-child {
+    border-radius: 0;
+}
+
+/* The last row keeps its bottom border here — a sheet is closed on all four
+   sides; only the card version let the wrapper clip it. */
+.tafne-ruler-wrap .tablecoil tbody tr:last-child td {
+    border-bottom: 1px solid var(--t-border);
+}
+
+/* The table viewport scrolls both ways now that the grid can exceed it. */
+.tafne-table-vp {
+    overflow: auto;
+    max-height: 70vh;
 }

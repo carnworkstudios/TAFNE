@@ -1045,22 +1045,30 @@ $(function () {
         $('#textSplitModal').modal('show');
     });
 
-    // =================== LEFT PANEL TOGGLE ===================
+    // =================== PANEL TOGGLES ===================
+    // The collapse itself is CSS (width -> 0 with a transition; see the
+    // desktop block in tifanyUI.css). All this has to do is stamp the width
+    // the panel had before it starts closing, because the panel's own
+    // children are held at that width while it narrows -- otherwise they
+    // reflow on every frame and the panel looks like it is falling apart
+    // rather than sliding shut. The right panel is user-resizable, so the
+    // number cannot be a constant in the stylesheet.
+    function _togglePanel($panel, $btn, showTitle, hideTitle) {
+        const willHide = !$panel.hasClass('panel-hidden');
+        if (willHide) {
+            $panel[0].style.setProperty('--gx-panel-w', $panel.outerWidth() + 'px');
+        }
+        $panel.toggleClass('panel-hidden', willHide);
+        $btn.attr('title', willHide ? showTitle : hideTitle);
+        $btn.toggleClass('active', !willHide);
+    }
+
     $('#toggleLeftPanel').on('click', function () {
-        const $panel = $('.tifany-left-panel');
-        $panel.toggleClass('panel-hidden');
-        const isHidden = $panel.hasClass('panel-hidden');
-        $(this).attr('title', isHidden ? 'Show Tools Panel' : 'Hide Tools Panel');
-        $(this).toggleClass('active', !isHidden);
+        _togglePanel($('.tifany-left-panel'), $(this), 'Show Tools Panel', 'Hide Tools Panel');
     });
 
-    // =================== RIGHT PANEL TOGGLE ===================
     $('#toggleRightPanel').on('click', function () {
-        const $panel = $('.tifany-right-panel');
-        $panel.toggleClass('panel-hidden');
-        const isHidden = $panel.hasClass('panel-hidden');
-        $(this).attr('title', isHidden ? 'Show Code Panel' : 'Hide Code Panel');
-        $(this).toggleClass('active', !isHidden);
+        _togglePanel($('.tifany-right-panel'), $(this), 'Show Code Panel', 'Hide Code Panel');
     });
 
     // =================== LEFT PANEL SECTION ACCORDION ===================
@@ -1490,9 +1498,12 @@ $(function () {
 
     // Mode routing: switch to the requested mode after the tool finishes initializing.
     // Source priority: __GINEXYS_INITIAL_MODE__ (VS Code extension injects) > ?view= (web OS deep link).
-    // Accepted slugs: 'node-editor' (alias: 'node'), 'lab' (alias: 'lab-mode'), 'table' / 'table-mode' / 'draw' / 'draw-mode' (no-op — default).
+    // Accepted slugs: 'node-editor' (alias: 'node'), 'lab' (alias: 'lab-mode'),
+    // 'equation' (aliases: 'equation-mode', 'math'), 'table' / 'table-mode' /
+    // 'draw' / 'draw-mode' (no-op — default).
     var _viewQuery = new URLSearchParams(location.search).get('view');
-    var _viewAlias = { 'node': 'node-editor', 'lab-mode': 'lab', 'table-mode': 'table', 'draw-mode': 'draw' };
+    var _viewAlias = { 'node': 'node-editor', 'lab-mode': 'lab', 'table-mode': 'table', 'draw-mode': 'draw',
+                       'equation-mode': 'equation', 'math': 'equation' };
     if (!window.__GINEXYS_INITIAL_MODE__ && _viewQuery) {
         window.__GINEXYS_INITIAL_MODE__ = _viewAlias[_viewQuery] || _viewQuery;
     }
@@ -1503,6 +1514,8 @@ $(function () {
                 enableNodeEditor();
             } else if (_mode === 'lab' && typeof toggleLab === 'function') {
                 if (!window.labModeEnabled) toggleLab();
+            } else if (_mode === 'equation' && typeof enableEquationEditor === 'function') {
+                enableEquationEditor();
             }
         }, 150);
     }

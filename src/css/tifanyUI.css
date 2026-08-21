@@ -106,6 +106,32 @@ body {
     background: var(--t-hover-bg);
 }
 
+/* Activity-bar utility actions */
+#sidebar-nav-mount > .nav-link {
+    order: 100;
+    margin-top: 4px;
+    margin-left: 0;
+    flex-shrink: 0;
+    width: 36px;
+    min-height: 36px;
+    padding: 8px 0;
+    border: 1px solid var(--t-border);
+    border-radius: 9px;
+    color: var(--t-text-muted);
+    background: var(--t-bg-surface);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 18px;
+    text-align: center;
+    transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+#sidebar-nav-mount > .nav-link:hover {
+    color: var(--t-text);
+    border-color: var(--t-accent);
+    background: var(--t-hover-bg);
+}
+
 /* ── Mode tab pill group ── */
 .table-mode {
     display: flex;
@@ -195,6 +221,15 @@ body {
     color: var(--t-text);
 }
 
+#toggleRightPanel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+    color: var(--t-text-muted);
+}
+
 /* ===========================
    3-PANEL APP LAYOUT
    =========================== */
@@ -259,12 +294,55 @@ body {
     align-self: flex-start;
 }
 
-.tifany-left-panel.panel-hidden {
-    display: none;
+/* --- Panel collapse (desktop) ---------------------------------------------
+   `display: none` made a toggle a jump cut: the panel vanished and the centre
+   panel snapped across the gap it left. Collapsing the panel's width instead
+   gives the centre something to animate against, so the two move together.
+
+   The content inside must not reflow while the panel narrows, or the collapse
+   reads as the panel garbling itself rather than sliding away. It is held at
+   its pre-collapse width via --gx-panel-w (stamped by the toggle handler in
+   tifany.js, since the right panel is user-resizable and has no fixed width)
+   and clipped by the panel's own overflow.
+
+   Mobile keeps the bottom-sheet transform in the max-width:767px block below;
+   these rules are desktop-only so the two never fight. */
+@media (min-width: 768px) {
+    .tifany-left-panel,
+    .tifany-right-panel {
+        transition:
+            width 260ms cubic-bezier(0.32, 0.72, 0, 1),
+            min-width 260ms cubic-bezier(0.32, 0.72, 0, 1),
+            max-width 260ms cubic-bezier(0.32, 0.72, 0, 1),
+            opacity 160ms ease;
+    }
+
+    .tifany-left-panel.panel-hidden,
+    .tifany-right-panel.panel-hidden {
+        width: 0 !important;
+        min-width: 0 !important;
+        max-width: 0 !important;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        /* Zero the border too, or the collapse stops at a 1px seam. */
+        border-left-width: 0;
+        border-right-width: 0;
+    }
+
+    /* Hold the contents at the width the panel had, so they are clipped
+       rather than re-laid-out on every animation frame. */
+    .tifany-left-panel.panel-hidden > *,
+    .tifany-right-panel.panel-hidden > * {
+        min-width: var(--gx-panel-w, 200px);
+    }
 }
 
-.tifany-right-panel.panel-hidden {
-    display: none;
+@media (prefers-reduced-motion: reduce) {
+    .tifany-left-panel,
+    .tifany-right-panel {
+        transition: none;
+    }
 }
 
 /* --- Center panel --- */
@@ -2135,21 +2213,27 @@ body.node-editor-active #sheetTabBar {
     position: relative;
     display: none;
     align-items: center;
+    order: 90;
+    margin-top: auto;
 }
 body.gx-embedded .gx-mcp-pill-wrap { display: flex; }
 
 .gx-mcp-pill {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 5px;
-    padding: 3px 9px 3px 7px;
-    border-radius: 20px;
+    justify-content: center;
+    gap: 2px;
+    width: 36px;
+    min-height: 42px;
+    padding: 5px 2px;
+    border-radius: 9px;
     border: 1px solid var(--t-border, rgba(255,255,255,0.12));
     background: transparent;
     color: var(--t-text-muted, #888);
-    font-size: 11px;
+    font-size: 8px;
     font-weight: 600;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.08em;
     cursor: pointer;
     white-space: nowrap;
     transition: border-color 0.15s, color 0.15s;
@@ -2160,6 +2244,27 @@ body.gx-embedded .gx-mcp-pill-wrap { display: flex; }
     color: var(--t-accent, #4fa8f5);
 }
 .gx-mcp-pill svg { flex-shrink: 0; }
+
+@media (max-width: 767px) {
+    #sidebar-nav-mount > .nav-link {
+        order: 0;
+        margin-top: 0;
+        width: 32px;
+        min-height: 32px;
+        padding: 6px 0;
+    }
+
+    .gx-mcp-pill-wrap {
+        order: 0;
+        margin-top: 0;
+    }
+
+    .gx-mcp-pill {
+        width: 32px;
+        min-height: 32px;
+        padding: 3px 2px;
+    }
+}
 
 .gx-mcp-popover {
     display: none;

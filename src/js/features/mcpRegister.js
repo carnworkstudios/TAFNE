@@ -155,8 +155,21 @@
           params: { attribute: { type: 'string' }, value: { type: 'string' } } },
         // (collapsible "tabs" are done with make_tabs, above — not a per-column op)
         // ── Node editor ──────────────────────────────────────────────────────────
-        { name: 'set_mode', group: 'mode', doc: 'Switch tool mode (from /table-view /lab-mode /node references).',
-          params: { mode: { type: 'enum', values: ['table', 'lab', 'node'] } } },
+        { name: 'set_mode', group: 'mode', doc: 'Switch tool mode (from /table-view /lab-mode /node /equation references).',
+          params: { mode: { type: 'enum', values: ['table', 'lab', 'node', 'equation'] } } },
+        // ── Equations ────────────────────────────────────────────────────────────
+        // The payload is always LaTeX. A verb that took rendered markup would be
+        // asking the model for a picture of an equation instead of the equation.
+        { name: 'add_equation', group: 'equation', doc: 'Add a LaTeX equation to the document and open it in the Equation Editor.',
+          params: { latex: { type: 'string', doc: 'LaTeX source, without $ delimiters' }, name: { type: 'string' } } },
+        { name: 'set_equation', group: 'equation', doc: 'Replace the LaTeX of an existing equation. `id` defaults to the active one.',
+          params: { latex: { type: 'string' }, id: { type: 'string' } } },
+        { name: 'delete_equation', group: 'equation', doc: 'Delete an equation by id.', params: { id: { type: 'string' } } },
+        { name: 'select_equation', group: 'equation', doc: 'Make an equation the active one.', params: { id: { type: 'string' } } },
+        { name: 'insert_equation_into_cell', group: 'equation', doc: 'Write the equation into the currently selected table cell as $$…$$. Select a cell first.',
+          params: { id: { type: 'string' } } },
+        { name: 'set_cell_math', group: 'equation', doc: 'Set one cell to a LaTeX expression (wraps it in $$…$$ so the table view renders it). 0-indexed.',
+          params: { row: { type: 'int' }, col: { type: 'int' }, latex: { type: 'string' }, sheet: { type: 'string' } } },
         { name: 'add_node', group: 'node', doc: 'Add an operator node to the node graph.',
           params: { node_type: { type: 'enum', values: ['filter', 'vlookup', 'formula', 'join', 'api'] }, label: { type: 'string' } } },
         { name: 'add_sheet_node', group: 'node', doc: 'Add the current/named sheet as a table node.', params: { sheet: { type: 'string' } } },
@@ -200,9 +213,11 @@
         if (name === 'set_mode') {
             if (op.mode === 'lab' && typeof window.enableLab === 'function') { window.enableLab(); return { ok: true, mode: 'lab' }; }
             if (op.mode === 'node' && typeof window.enableNodeEditor === 'function') { window.enableNodeEditor(); return { ok: true, mode: 'node' }; }
+            if (op.mode === 'equation' && typeof window.enableEquationEditor === 'function') { window.enableEquationEditor(); return { ok: true, mode: 'equation' }; }
             if (op.mode === 'table') {
                 if (typeof window.disableLab === 'function') window.disableLab();
                 if (typeof window.disableNodeEditor === 'function') window.disableNodeEditor();
+                if (typeof window.disableEquationEditor === 'function') window.disableEquationEditor();
                 return { ok: true, mode: 'table' };
             }
             return _notBuilt('set_mode(' + op.mode + ')');
@@ -319,6 +334,46 @@
             case 'build_table_from_node':
                 if (typeof window.buildTableFromSelectedNode === 'function') { window.buildTableFromSelectedNode(); return { ok: true }; }
                 return _notBuilt('build_table_from_node');
+
+            // ── Equations ────────────────────────────────────────────────────
+            case 'add_equation': {
+                if (typeof window.addEquation !== 'function') return _notBuilt('add_equation');
+                var eqId = window.addEquation(op.name, op.latex, { source: 'copilot' });
+                return { ok: true, id: eqId };
+            }
+            case 'set_equation': {
+                if (typeof window.setEquationLatex !== 'function') return _notBuilt('set_equation');
+                var target = op.id || window.activeEquationId;
+                if (!target) throw new Error('no equation to set — add one first');
+                if (!window.setEquationLatex(target, op.latex)) throw new Error('unknown equation: ' + target);
+                return { ok: true, id: target };
+            }
+            case 'delete_equation':
+                if (typeof window.deleteEquation !== 'function') return _notBuilt('delete_equation');
+                if (!window.deleteEquation(op.id)) throw new Error('unknown equation: ' + op.id);
+                return { ok: true };
+            case 'select_equation':
+                if (typeof window.selectEquation !== 'function') return _notBuilt('select_equation');
+                if (!window.selectEquation(op.id)) throw new Error('unknown equation: ' + op.id);
+                return { ok: true };
+            case 'insert_equation_into_cell':
+                if (typeof window.insertEquationIntoCell !== 'function') return _notBuilt('insert_equation_into_cell');
+                if (!window.insertEquationIntoCell(op.id)) {
+                    throw new Error('no cell is selected — select one in the table view first');
+                }
+                return { ok: true };
+            case 'set_cell_math': {
+                // Routed through the existing grid-op path rather than writing the
+                // DOM here, so math cells go through the same history, selection
+                // and re-render as any other cell edit. The $$ is what the inline
+                // renderer looks for; the verb adds it so the model does not have
+                // to know the delimiter convention.
+                _resolveSheet(op);
+                return _dispatchGridOps([{
+                    op: 'set_cell', row: op.row, col: op.col,
+                    value: '$$' + String(op.latex == null ? '' : op.latex) + '$$',
+                }]);
+            }
 
             default:
                 // ── VTA (auto-generated verbs) ────────────────────────────────────

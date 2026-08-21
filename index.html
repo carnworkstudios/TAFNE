@@ -308,6 +308,24 @@
     <script src="src/js/features/nodeConfigPanel.js"></script>
     <script src="src/js/features/nodeExecutor.js"></script>
     <script src="src/js/features/nodeEditor.js"></script>
+    <!-- KaTeX ships as UMD, and Monaco's AMD loader (loader.min.js, above) has
+         already defined `define.amd` by the time this runs. UMD then takes the
+         AMD branch, calls define() anonymously, and the loader rejects it with
+         "Can only have one anonymous define call per script file" — leaving
+         window.katex undefined and every equation unrendered. Hiding `define`
+         for the length of this one script forces the global branch. Done here
+         rather than by re-ordering the tags because ordering is an invariant
+         nobody can see; this states the reason at the point of the problem. -->
+    <script>
+      window.__gxSavedDefine = window.define;
+      window.define = undefined;
+    </script>
+    <script src="vendor/katex/katex.min.js"></script>
+    <script>
+      window.define = window.__gxSavedDefine;
+      delete window.__gxSavedDefine;
+    </script>
+    <script src="src/js/features/equationEditor.js"></script>
     <script src="src/js/core/engine.js"></script>
     <script src="src/js/features/mcpRegister.js"></script>
 
@@ -315,6 +333,11 @@
     <link rel="stylesheet" href="src/css/tableEditor.css" />
     <link rel="stylesheet" href="src/css/tifanyUI.css" />
     <link rel="stylesheet" href="src/css/nodeEditor.css" />
+    <!-- KaTeX is vendored, not CDN-loaded: the rendered equation IS the content
+         being edited, so a CDN miss would leave the editor unable to show
+         whether what you typed is right. See scripts/vendor-katex-tafne.mjs. -->
+    <link rel="stylesheet" href="vendor/katex/katex.min.css" />
+    <link rel="stylesheet" href="src/css/equationEditor.css" />
     <!-- GINEXYS Gate + Star Nudge -->
     <!-- Tokens load first so modals render correctly in environments where
          portfolio.css isn't reachable (e.g. VS Code webview sandbox). -->
@@ -338,99 +361,7 @@
 
   <body>
     <!-- ==================== HEADER ==================== -->
-    <header class="tifany-header">
-      <div class="logo">
-        <h1>
-          <a
-            href="../../index.html"
-            style="text-decoration: none; color: inherit"
-          >
-            GINEXYS
-          </a>
-        </h1>
-      </div>
-      <nav class="nav" style="flex: 1">
-        <a
-          href="https://ginexys.com/tools/table-formatter/docs/getting-started.html"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="nav-link"
-          title="Getting Started guide"
-          style="
-            margin-left: auto;
-            border: 2px solid;
-            border-radius: 50%;
-            font-size: 0.6rem;
-          "
-          >?</a
-        >
-      </nav>
-
-      <!-- MCP Pill (VS Code only) -->
-      <div class="input-toolbar-divider"></div>
-      <div class="gx-mcp-pill-wrap" id="mcpPillWrap">
-        <button
-          class="gx-mcp-pill"
-          id="mcpPillBtn"
-          aria-label="Use with Copilot"
-          aria-expanded="false"
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-          >
-            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z" />
-            <path d="M12 8v4l3 3" />
-          </svg>
-          MCP
-        </button>
-        <div class="gx-mcp-popover" id="mcpPopover" role="tooltip">
-          <div class="gx-mcp-popover-title">Use with Copilot</div>
-          <div class="gx-mcp-popover-ref">
-            <span>#ginexys_format_table</span>
-            <button
-              title="Copy"
-              onclick="navigator.clipboard.writeText('#ginexys_format_table')"
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <rect x="9" y="9" width="13" height="13" rx="2" />
-                <path
-                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                />
-              </svg>
-            </button>
-          </div>
-          <div class="gx-mcp-popover-sample">
-            Sample prompt:
-            <code
-              >#ginexys_format_table format this as markdown:
-              Name,Age,City</code
-            >
-          </div>
-          <div class="gx-mcp-popover-docs">
-            <a href="https://ginexys.com/docs#mcp-tools" target="_blank"
-              >Full MCP docs &rarr;</a
-            >
-          </div>
-        </div>
-      </div>
-      <!-- CWS: back-annotate to Schema Editor (hidden when standalone) -->
-      <!-- <button id="backAnnotateBtn" class="btn btn-sm" title="Back-annotate component labels to Schema Editor"
-            style="display:none; background: rgba(79, 172, 254, 0.15); border: 1px solid rgba(79, 172, 254, 0.4); color: #4facfe; font-weight: 600; margin-left: 12px;">
-            <i class="fas fa-reply"></i> Back-Annotate
-        </button> -->
-    </header>
+    
     <!-- ==================== FIRST-VISIT BANNER ==================== -->
     <div
       id="tafne-welcome-banner"
@@ -488,6 +419,42 @@
         id="sidebar-nav-mount"
         style="display: flex; flex-direction: column; gap: 5px"
       >
+        <div class="gx-mcp-pill-wrap" id="mcpPillWrap">
+          <button
+            class="gx-mcp-pill"
+            id="mcpPillBtn"
+            aria-label="Use with Copilot"
+            aria-expanded="false"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z" />
+              <path d="M12 8v4l3 3" />
+            </svg>
+            MCP
+          </button>
+          <div class="gx-mcp-popover" id="mcpPopover" role="tooltip">
+            <div class="gx-mcp-popover-title">Use with Copilot</div>
+            <div class="gx-mcp-popover-ref">
+              <span>#ginexys_format_table</span>
+              <button title="Copy" onclick="navigator.clipboard.writeText('#ginexys_format_table')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              </button>
+            </div>
+            <div class="gx-mcp-popover-sample">Sample prompt:<code>#ginexys_format_table format this as markdown: Name,Age,City</code></div>
+            <div class="gx-mcp-popover-docs"><a href="https://ginexys.com/docs#mcp-tools" target="_blank">Full MCP docs &rarr;</a></div>
+          </div>
+        </div>
+        <a
+          href="https://ginexys.com/tools/table-formatter/docs/getting-started.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="nav-link"
+          title="Getting Started guide"
+          >?</a
+        >
         <!-- Left panel toggle -->
         <button
           id="toggleLeftPanel"
@@ -502,21 +469,6 @@
         >
           <!-- class="theme-toggle-btn active" -->
           ☰
-        </button>
-        <!-- Right panel toggle -->
-        <button
-          id="toggleRightPanel"
-          title="Hide Code Panel"
-          aria-label="Toggle code panel"
-          style="
-            font-size: 13px;
-            font-weight: 700;
-            background: lightgray;
-            border: 2px solid lightgray;
-            border-radius: 3px;
-          "
-        >
-          &lt;/&gt;
         </button>
         <!-- Theme toggle -->
         <button
@@ -580,6 +532,15 @@
             title="Lab Mode — validate, transform &amp; analyze table data"
           >
             <i class="fas fa-database"></i>
+          </button>
+
+          <!-- Equation Editor -->
+          <button
+            id="equationEditorToggle"
+            class="theme-toggle-btn"
+            title="Equation Editor — write and edit LaTeX with a live preview"
+          >
+            <i class="fas fa-square-root-variable"></i>
           </button>
         </div>
 
@@ -1218,12 +1179,12 @@
             class="table-edit"
             style="display: flex; flex-direction: row; gap: 10px"
           >
-            <!-- Drag & Drop switch -->
+            <!-- Drag & Drop switch 
             <label class="toolbar-switch-label" title="Toggle Drag &amp; Drop">
               <input type="checkbox" id="dragDropSwitch" />
-              <span class="toolbar-switch-track"></span>
+              <span class="toolbar-switch-track"></span> 
               <span class="toolbar-switch-text">DRAG-DROP</span>
-            </label>
+            </label> -->
 
             <div class="input-toolbar-divider"></div>
 
@@ -1266,7 +1227,80 @@
             </button>
           </div>
 
-          <span class="center-pos" id="tablePosition">Pos · 1:1</span>
+          <!-- Right panel toggle -->
+        <button
+          id="toggleRightPanel"
+          title="Hide Code Panel"
+          aria-label="Toggle code panel"
+          style="
+            font-size: 13px;
+            font-weight: 700;
+            background: lightgray;
+            border: 2px solid lightgray;
+            border-radius: 3px;
+            width: 25px;
+            height: 25px;
+          "
+        >
+          <!-- <i class="fas fa-table-columns" aria-hidden="true"></i> -->
+          <iconify-icon icon="material-symbols:dock-to-left-outline"><template shadowrootmode="open"><style data-style="data-style">:host{display:inline-block;vertical-align:0}span,svg{display:block}</style><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h14q.825 0 1.413.588T21 5v14q0 .825-.587 1.413T19 21zm11-2h3V5h-3zm-2 0V5H5v14zm2 0h3z"></path></svg></template></iconify-icon>
+        </button>
+        </div>
+
+        <!-- Equation Editor Canvas (shown when Equation mode is active) -->
+        <div id="equationCanvas" class="equation-canvas">
+          <div class="equation-canvas-header">
+            <span><i class="fas fa-square-root-variable"></i> Equation Editor</span>
+            <div class="equation-canvas-header-actions">
+              <button
+                id="eqNew"
+                class="btn btn-sm btn-outline-primary"
+                title="Start a new equation"
+              >
+                <i class="fas fa-plus"></i> New
+              </button>
+              <button
+                id="eqInsertCell"
+                class="btn btn-sm btn-success"
+                title="Put this equation into the selected table cell as $$…$$"
+              >
+                <i class="fas fa-table"></i> Insert into cell
+              </button>
+              <button
+                id="eqCopy"
+                class="btn btn-sm btn-outline-secondary"
+                title="Copy the LaTeX source"
+              >
+                <i class="fas fa-copy"></i> Copy LaTeX
+              </button>
+              <button id="eqExit" class="btn btn-sm btn-outline-secondary">
+                Exit
+              </button>
+            </div>
+          </div>
+          <div class="equation-canvas-body">
+            <!-- LEFT: every equation in this document -->
+            <div id="eqList" class="eq-list"></div>
+
+            <!-- RIGHT: source, error, preview, palette -->
+            <div class="eq-work">
+              <div class="eq-meta">
+                <label for="eqName">Name</label>
+                <input id="eqName" type="text" autocomplete="off" spellcheck="false" />
+              </div>
+              <div class="eq-source-wrap">
+                <textarea
+                  id="eqSource"
+                  spellcheck="false"
+                  autocomplete="off"
+                  placeholder="\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"
+                ></textarea>
+                <div id="eqError" class="eq-error"></div>
+              </div>
+              <div id="eqPreview" class="eq-preview"></div>
+              <div id="eqPalette" class="eq-palette"></div>
+            </div>
+          </div>
         </div>
 
         <!-- Table editing area -->
@@ -2497,15 +2531,61 @@
                       meta: gdata.meta,
                     });
                 }
+                // Equation tags carry LaTeX, which has an editing surface here.
+                // Thin data routing only — the sender already resolved the TeX
+                // into tag.content; this side just puts each one in the store.
+                // A tag that arrived with no content is still loaded, with its
+                // pointer kept, because an empty equation the user can retype
+                // beats an equation that silently never appeared.
+                var eqTags = gdata.tags.filter(function (t) {
+                  return t.kind === "equation" || t.artifact?.kind === "equation";
+                });
+                if (eqTags.length && typeof window.addEquation === "function") {
+                  eqTags.forEach(function (t, i) {
+                    var art = t.artifact || {};
+                    var tex =
+                      (t.content && t.content.latex) || art.latex || t.value || "";
+                    window.addEquation(
+                      "Eq " + (i + 1) + (art.page != null ? " · p" + art.page : ""),
+                      tex,
+                      {
+                        // The return address. Without it a correction made here
+                        // can be exported but never pushed back to the region it
+                        // came from, so the panel must be able to tell them apart.
+                        origin:
+                          art.page != null && art.regionId
+                            ? {
+                                page: art.page,
+                                regionId: art.regionId,
+                                tool: gdata.meta?.source || "pdf-processor",
+                              }
+                            : null,
+                        lineage: t.provenance || null,
+                        source: gdata.meta?.source || null,
+                      }
+                    );
+                  });
+                }
                 if (window.__GX_TAFNE_ARTIFACTS__)
                   window.__GX_TAFNE_ARTIFACTS__.refresh();
                 $.toast({
                   heading: "TAFNE",
-                  text: "Received " + gdata.tags.length + " tag(s)",
+                  text:
+                    "Received " +
+                    gdata.tags.length +
+                    " tag(s)" +
+                    (eqTags.length
+                      ? " — " +
+                        eqTags.length +
+                        " equation(s) opened in the Equation Editor"
+                      : ""),
                   icon: "success",
                   loader: false,
                   stack: false,
                 });
+                if (eqTags.length && typeof window.enableEquationEditor === "function") {
+                  window.enableEquationEditor();
+                }
               }
             } catch (e) {
               $.toast({
@@ -2665,12 +2745,16 @@
         } else if (/\/lab-mode\//.test(p)) {
           var b = document.getElementById("labModeToggle");
           if (b) b.click();
+        } else if (/\/equation-mode\//.test(p)) {
+          var b = document.getElementById("equationEditorToggle");
+          if (b) b.click();
         }
 
         // On switch: keep URL in sync
         var modeMap = {
           nodeEditorToggle: "/tools/table-formatter/node-editor/",
           labModeToggle: "/tools/table-formatter/lab-mode/",
+          equationEditorToggle: "/tools/table-formatter/equation-mode/",
           selectToolToggle: "/tools/table-formatter/table-mode/",
           neExit: "/tools/table-formatter/",
         };
