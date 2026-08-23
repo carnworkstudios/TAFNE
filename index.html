@@ -344,6 +344,7 @@
     <link rel="stylesheet" href="/assets/css/ginexys-modals-tokens.css" />
     <link rel="stylesheet" href="/assets/css/ginexys-modals.css" />
     <script src="/assets/js/ginexys-modals.js" defer></script>
+    <script src="/assets/js/ginexys-billing.js" defer></script>
     <script src="/assets/js/ginexys-auth.js" defer></script>
     <script src="/assets/js/ginexys-settings.js" defer></script>
     <script src="/assets/js/ginexys-gate.js" defer></script>
@@ -1325,7 +1326,7 @@
         <!-- Section 2: Instruction (default collapsed) -->
         <div class="right-section" data-mobile-order="2">
           <div class="right-section-header" data-target="right-instruction">
-            Quick References <span class="right-section-chevron">▲</span>
+            Shortcuts <span class="right-section-chevron">▲</span>
           </div>
           <div class="right-section-body collapsed" id="right-instruction">
             <h6><b>Shortcuts</b></h6>
@@ -1365,8 +1366,22 @@
           </div>
         </div>
 
-        <!-- Section 3: Generate Code (default open) -->
+        <!-- Section 3: References — the cross-tool scratchboard. Public shell
+           only: the board UI is the shell-injected panel
+           (assets/pdf-processor/ui/notesPanel.js), which mounts into this
+           container at runtime, exactly as #pane-notes ships empty in PDF
+           Processor. Renamed the old "Quick References" cheatsheet above to
+           Shortcuts so this section owns the name (see
+           architecture/pro-launch/reference-sheet.md). -->
         <div class="right-section" data-mobile-order="3">
+          <div class="right-section-header" data-target="right-references">
+            References <span class="right-section-chevron">▲</span>
+          </div>
+          <div class="right-section-body collapsed" id="right-references"></div>
+        </div>
+
+        <!-- Section 4: Generate Code (default open) -->
+        <div class="right-section" data-mobile-order="4">
           <div class="right-section-header" data-target="right-generate">
             Generate Code <span class="right-section-chevron">▼</span>
           </div>
@@ -2233,6 +2248,22 @@
           }
         });
       })();
+
+      // Post-export tip — fires on generate/download, once per session
+      document.addEventListener("DOMContentLoaded", function () {
+        if (window.GxGate) {
+          GxGate.init({
+            toolKey: "tifany_gen_count",
+            triggerIds: ["generateCode", "downloadCode"],
+            tip: {
+              text: "This table is cleaned and structured — send it into PDF Processor or Schema Editor to keep using it, no re-export.",
+              cta: "Send it →",
+              featureSlug: "cross-tool-send",
+              subtitle: "Send your TAFNE data to PDF Processor or Schema Editor — with lineage intact. Cross-tool flow is a Pro feature.",
+            },
+          });
+        }
+      });
 
       // Pro gates + cloud tab — always run (standalone and embedded)
       (function () {

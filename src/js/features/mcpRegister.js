@@ -172,6 +172,10 @@
           params: { row: { type: 'int' }, col: { type: 'int' }, latex: { type: 'string' }, sheet: { type: 'string' } } },
         { name: 'add_node', group: 'node', doc: 'Add an operator node to the node graph.',
           params: { node_type: { type: 'enum', values: ['filter', 'vlookup', 'formula', 'join', 'api'] }, label: { type: 'string' } } },
+        // The Ginex rail's reporting surface. Read-only and deterministic:
+        // counted facts about the active sheet, nothing generated.
+        { name: 'gx_report', group: 'report', doc: 'Deterministic findings and measured statistics for the active sheet.',
+          params: { scope: { type: 'enum', values: ['verify', 'analyze', 'both'] } } },
         { name: 'add_sheet_node', group: 'node', doc: 'Add the current/named sheet as a table node.', params: { sheet: { type: 'string' } } },
         { name: 'connect_nodes', group: 'node', doc: 'Wire one node’s output into another node’s input (references are node labels or ids). Ports are auto-picked from each node’s direction.',
           params: { from: { type: 'string', doc: 'source node label or id' }, to: { type: 'string', doc: 'target node label or id' } } },
@@ -206,8 +210,141 @@
     }
 
     // ── apply(op) — calls TAFNE's own public functions ───────────────────────────
+    /**
+     * The deterministic report behind the Ginex rail's Verify and Analyze panes.
+     *
+     * TAFNE's contribution to the pipeline is VALIDATE — "is this data
+     * trustworthy" — so the findings here are the ones that make a table
+     * untrustworthy to compute on: ragged rows, duplicate or empty headers,
+     * whole-empty columns, and cells that look numeric in a column that is
+     * mostly text. Each is COUNTED, never inferred.
+     *
+     * The column-type finding is deliberately phrased as a mismatch and not as
+     * a type declaration: this layer does not decide that a column IS numeric,
+     * only that it is inconsistent with itself.
+     */
+    function _gxReport(scope) {
+        var wantVerify = scope === 'verify' || scope === 'both';
+        var wantAnalyze = scope === 'analyze' || scope === 'both';
+        var grid = _rowsAsGrid();
+
+        if (!grid.length) {
+            return {
+                subject: 'table', ran: [], findings: [], metrics: null,
+                unavailable: 'No sheet is open, so no check could run.',
+            };
+        }
+
+        var ran = [];
+        var findings = [];
+        var headers = grid[0] || [];
+        var body = grid.slice(1);
+        var width = grid.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+
+        // ── Pack: shape ──────────────────────────────────────────────────
+        ran.push('shape');
+        var ragged = grid.filter(function (r) { return r.length !== width; }).length;
+        if (ragged) {
+            findings.push({
+                id: 'ragged-rows', severity: 'warning',
+                title: ragged + ' row' + (ragged === 1 ? '' : 's') + ' are not ' + width + ' cells wide',
+                detail: 'A ragged grid shifts every column after the gap for any consumer that indexes by position.',
+            });
+        }
+
+        // ── Pack: headers ────────────────────────────────────────────────
+        ran.push('headers');
+        var empty = headers.filter(function (h) { return !String(h || '').trim(); }).length;
+        if (empty) {
+            findings.push({
+                id: 'empty-headers', severity: 'warning',
+                title: empty + ' column' + (empty === 1 ? '' : 's') + ' have no header',
+                detail: 'Targets that create schema — Notion, a database export — need a name per column.',
+            });
+        }
+        var seen = {}, dupes = [];
+        headers.forEach(function (h) {
+            var k = String(h || '').trim().toLowerCase();
+            if (!k) return;
+            if (seen[k]) { if (dupes.indexOf(h) < 0) dupes.push(h); }
+            seen[k] = true;
+        });
+        if (dupes.length) {
+            findings.push({
+                id: 'duplicate-headers', severity: 'warning',
+                title: 'Duplicate column names: ' + dupes.join(', '),
+                detail: 'Export targets silently keep one of them unless the names are made unique.',
+            });
+        }
+
+        // ── Pack: emptiness + type consistency ───────────────────────────
+        ran.push('columns');
+        var cols = [];
+        for (var c = 0; c < width; c++) {
+            var vals = body.map(function (r) { return String(r[c] == null ? '' : r[c]).trim(); });
+            var filled = vals.filter(Boolean);
+            var numeric = filled.filter(function (v) { return /^-?[\d,]+(\.\d+)?%?$/.test(v); }).length;
+            cols.push({
+                index: c,
+                name: headers[c] || ('Column ' + (c + 1)),
+                filled: filled.length,
+                empty: vals.length - filled.length,
+                numericRatio: filled.length ? numeric / filled.length : null,
+            });
+        }
+        cols.filter(function (col) { return body.length && col.filled === 0; }).forEach(function (col) {
+            findings.push({
+                id: 'empty-column-' + col.index, severity: 'info',
+                title: 'Column "' + col.name + '" is entirely empty',
+                detail: 'Nothing to compute on, and it will travel to every export.',
+            });
+        });
+        cols.filter(function (col) {
+            return col.numericRatio != null && col.numericRatio > 0.6 && col.numericRatio < 1;
+        }).forEach(function (col) {
+            var odd = Math.round((1 - col.numericRatio) * col.filled);
+            findings.push({
+                id: 'mixed-column-' + col.index, severity: 'warning',
+                title: 'Column "' + col.name + '" is ' + Math.round(col.numericRatio * 100)
+                    + '% numeric — ' + odd + ' value' + (odd === 1 ? '' : 's') + ' are not',
+                detail: 'Reported as an inconsistency, not as a type: the column may legitimately '
+                    + 'mix units, footnote markers or "n/a".',
+            });
+        });
+
+        var report = { subject: 'table', ran: ran };
+
+        if (wantVerify) {
+            report.findings = findings;
+            report.counts = {
+                critical: 0,
+                warning: findings.filter(function (f) { return f.severity === 'warning'; }).length,
+                info: findings.filter(function (f) { return f.severity === 'info'; }).length,
+            };
+        }
+        if (wantAnalyze) {
+            var totalCells = body.length * width;
+            var filledCells = cols.reduce(function (n, col) { return n + col.filled; }, 0);
+            report.metrics = {
+                rows: body.length,
+                columns: width,
+                cells: totalCells,
+                filled: filledCells,
+                density: totalCells ? Number((filledCells / totalCells).toFixed(3)) : null,
+                columns_detail: cols,
+                sheets: (window.sheets && window.sheets.length) || null,
+            };
+        }
+        return report;
+    }
+
     function apply(op) {
         var name = op.op || op.name;
+
+        // Reporting first: it is read-only and must not touch sheet resolution
+        // or mode, so a report can never have a side effect on the document it
+        // is describing.
+        if (name === 'gx_report') return _gxReport(op.scope || 'both');
 
         // set_mode first (no sheet resolution).
         if (name === 'set_mode') {
