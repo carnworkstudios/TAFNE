@@ -332,23 +332,50 @@ function parseMarkdownInput(md) {
     return tableHtml;
 }
 
-/** Parse JSON: array of objects → table */
+/** Parse JSON: array of objects or array of rows → table */
 function parseJsonInput(json) {
     let data;
-    try { data = JSON.parse(json); } catch (e) {
-        alert('Invalid JSON: ' + e.message);
+    try { data = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) {
+        if (typeof alert === 'function') alert('Invalid JSON: ' + e.message);
         return '';
     }
 
     // Support: array of objects, { table: [...] }, { table_1: [...], ... },
     // or wrapped objects like cws-netlist-v1 where the first key is metadata not data.
-    if (!Array.isArray(data)) {
+    if (!Array.isArray(data) && data && typeof data === 'object') {
         const arrayKey = Object.keys(data).find(k => Array.isArray(data[k]) && data[k].length > 0);
         data = arrayKey ? data[arrayKey] : [];
     }
     if (!Array.isArray(data) || data.length === 0) {
-        alert('JSON must be an array of objects. Could not find a non-empty array in the input.');
+        if (typeof alert === 'function') alert('JSON must be an array of objects or rows.');
         return '';
+    }
+
+    // If array of arrays (cell grid or string grid)
+    if (Array.isArray(data[0])) {
+        let tableHtml = '<table class="tablecoil crosshair-table">';
+        data.forEach((row, rIdx) => {
+            tableHtml += '<tr id="test">';
+            (Array.isArray(row) ? row : [row]).forEach((c) => {
+                const isObj = c && typeof c === 'object';
+                const tag = (isObj && c.header) || rIdx === 0 ? 'th' : 'td';
+                let text = '';
+                let colSpan = isObj && c.colSpan > 1 ? c.colSpan : 1;
+                let rowSpan = isObj && c.rowSpan > 1 ? c.rowSpan : 1;
+                if (isObj) {
+                    text = c.text != null ? c.text : (c.value != null ? c.value : (c.content != null ? c.content : ''));
+                } else if (c != null) {
+                    text = String(c);
+                }
+                let attrs = '';
+                if (colSpan > 1) attrs += ` colspan="${colSpan}"`;
+                if (rowSpan > 1) attrs += ` rowspan="${rowSpan}"`;
+                tableHtml += `<${tag}${attrs}>${_escHtml(text)}</${tag}>`;
+            });
+            tableHtml += '</tr>';
+        });
+        tableHtml += '</table>';
+        return tableHtml;
     }
 
     const headers = Object.keys(data[0]);
@@ -357,7 +384,16 @@ function parseJsonInput(json) {
     tableHtml += '</tr>';
     data.forEach(row => {
         tableHtml += '<tr id="test">';
-        headers.forEach(h => { tableHtml += `<td>${_escHtml(row[h] !== undefined ? row[h] : '')}</td>`; });
+        headers.forEach(h => {
+            const val = row[h];
+            let cellText = '';
+            if (val && typeof val === 'object') {
+                cellText = val.text != null ? val.text : (val.value != null ? val.value : (val.content != null ? val.content : ''));
+            } else if (val !== undefined && val !== null) {
+                cellText = String(val);
+            }
+            tableHtml += `<td>${_escHtml(cellText)}</td>`;
+        });
         tableHtml += '</tr>';
     });
     tableHtml += '</table>';

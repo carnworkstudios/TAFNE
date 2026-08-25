@@ -87,12 +87,21 @@ function cellGridToTableHtml(rows) {
     var html = '<table class="tablecoil crosshair-table">';
     (rows || []).forEach(function (row) {
         html += '<tr>';
-        row.forEach(function (c) {
-            var tag = c.header ? 'th' : 'td';
+        (Array.isArray(row) ? row : [row]).forEach(function (c) {
+            var isObj = c && typeof c === 'object';
+            var tag = (isObj && c.header) ? 'th' : 'td';
+            var colSpan = isObj && c.colSpan > 1 ? c.colSpan : 1;
+            var rowSpan = isObj && c.rowSpan > 1 ? c.rowSpan : 1;
+            var text = '';
+            if (isObj) {
+                text = c.text != null ? c.text : (c.value != null ? c.value : (c.content != null ? c.content : ''));
+            } else if (c != null) {
+                text = String(c);
+            }
             var attrs = '';
-            if (c.colSpan > 1) attrs += ' colspan="' + c.colSpan + '"';
-            if (c.rowSpan > 1) attrs += ' rowspan="' + c.rowSpan + '"';
-            html += '<' + tag + attrs + '>' + _escHtml(c.text) + '</' + tag + '>';
+            if (colSpan > 1) attrs += ' colspan="' + colSpan + '"';
+            if (rowSpan > 1) attrs += ' rowspan="' + rowSpan + '"';
+            html += '<' + tag + attrs + '>' + _escHtml(text) + '</' + tag + '>';
         });
         html += '</tr>';
     });
@@ -161,6 +170,9 @@ function loadTablesAsSheets(payload) {
     var added = 0;
     groups.forEach(function (g) {
         var html = g.tables.map(function (t) {
+            if (Array.isArray(t.rows) && t.rows.length > 0 && Array.isArray(t.rows[0])) {
+                return cellGridToTableHtml(t.rows);
+            }
             return normalized ? cellGridToTableHtml(t.rows) : parseJsonInput(JSON.stringify(t.rows));
         }).join('');
         addSheet(g.name || ('Table ' + (window._sheetCounter + 1)), html,

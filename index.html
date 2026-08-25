@@ -238,6 +238,10 @@
     <script src="/assets/os/mcp.js"></script>
     <script src="/assets/os/bridge.js"></script>
     <script src="/assets/os/pointer.js"></script>
+    <!-- "Open in Ginexys" on a published artifact page lands here with
+         ?artifact=<id>[&region=<r>]. Loads the content from the public API —
+         the source PDF is never stored, so there is nothing else to open. -->
+    <script src="/assets/js/ginexys-artifact-open.js" defer></script>
     <script src="/assets/js/gx-track.js"></script>
 
     <!-- jQuery (must be before Bootstrap JS and TIFANY scripts) -->
@@ -1366,19 +1370,14 @@
           </div>
         </div>
 
-        <!-- Section 3: References — the cross-tool scratchboard. Public shell
-           only: the board UI is the shell-injected panel
-           (assets/pdf-processor/ui/notesPanel.js), which mounts into this
-           container at runtime, exactly as #pane-notes ships empty in PDF
-           Processor. Renamed the old "Quick References" cheatsheet above to
-           Shortcuts so this section owns the name (see
-           architecture/pro-launch/reference-sheet.md). -->
-        <div class="right-section" data-mobile-order="3">
+        <!-- Section 3: References (decoupled from active submodule build)
+        <div class="right-section" data-mobile-order="3" style="display:none;">
           <div class="right-section-header" data-target="right-references">
             References <span class="right-section-chevron">▲</span>
           </div>
           <div class="right-section-body collapsed" id="right-references"></div>
         </div>
+        -->
 
         <!-- Section 4: Generate Code (default open) -->
         <div class="right-section" data-mobile-order="4">
