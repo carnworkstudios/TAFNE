@@ -25,7 +25,7 @@ function generateTabs(tableHtml) {
         for (let j = 1; j <= buttonIndex; j++) {
             spHtml += `  <button class="sp-option" data-value="${j}" data-panel="${i}">${j}</button>\n`;
         }
-        spHtml += '</div><br>';
+        spHtml += '</div>';
 
         const tableOuterHtml = $('<div>').append($(this).clone()).html();
 

@@ -236,7 +236,7 @@ body {
 .tifany-app {
     display: flex;
     flex-direction: row;
-    height: calc(100vh - var(--t-header-height));
+    height: 100%;
     overflow: hidden;
 }
 
@@ -290,7 +290,7 @@ body {
     flex-shrink: 0;
     position: sticky;
     top: 0;
-    height: calc(100vh - var(--t-header-height));
+    height: 100%;
     align-self: flex-start;
 }
 
@@ -663,13 +663,60 @@ button.left-section-header.collapsed::after {
     
 }
 
+/* ── Sheet card (proto-b "Segment Card") ─────────────────────────────────────
+   One card per table: the .accordion button is its title bar and the .panel is
+   its body, so the two carry a single continuous border and one shadow rather
+   than reading as a grey bar sitting on a separate box. */
+#tableContainer button.accordion {
+    /* A <button> is inline-block, so an inherited text-align centred the title
+       bar over its own card. It is the card's top edge — it has to start where
+       the card starts. */
+    display: block;
+    text-align: left;
+    background: var(--t-bg-workspace);
+    color: var(--t-text);
+    border: 1px solid var(--t-border);
+    border-radius: 12px 12px 0 0;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 16px;
+    max-width: 960px;
+    transition: background 150ms, color 150ms;
+}
+
+#tableContainer button.accordion:hover {
+    background: var(--t-hover-bg);
+    color: var(--t-primary);
+}
+
+#tableContainer button.accordion.active {
+    background: var(--t-bg-workspace);
+    color: var(--t-text);
+    border-bottom-color: transparent;
+    border-radius: 12px 12px 0 0;
+}
+
+#tableContainer button.accordion::after,
+#tableContainer button.accordion.active::after {
+    content: '▾';
+    float: right;
+    font-size: 10px;
+    color: var(--t-text-muted);
+    transition: transform 150ms;
+    display: inline-block;
+    transform: rotate(-90deg);
+}
+
+#tableContainer button.accordion.active::after {
+    transform: rotate(0deg);
+}
+
 #tableContainer .panel {
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--t-border);
     border-top: none;
-    border-radius: 0 0 14px 14px;
-    box-shadow:
-        0 1px 3px rgba(0,0,0,0.06),
-        0 4px 16px rgba(0,0,0,0.04);
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     background: var(--t-bg-surface);
     padding: 0;
     margin-bottom: 16px;

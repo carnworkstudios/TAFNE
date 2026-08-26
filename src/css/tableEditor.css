@@ -149,64 +149,98 @@ tr:hover td.active {
     background-color: lightgray;
 }
 
-/* --------------------Class Styles - Table Cell Truncations--------------------- */
-[class^="sp-"] {
+/* --------------------Class Styles - Table Cell Truncations---------------------
+   Scoped to td/th: the attribute selector also matches .sp-option (the tab
+   buttons) and .sp-class (the prefix button in the Styles panel), and hiding
+   every tab that is not currently active is exactly the wrong behaviour for a
+   tab strip. */
+td[class^="sp-"],
+th[class^="sp-"],
+td[class*=" sp-"],
+th[class*=" sp-"] {
     display: none;
 }
 
 /* Scope .active to only sp-* table cells; do NOT use global .active which conflicts
    with Bootstrap and our toolbar button states */
-[class^="sp-"].active {
+td[class^="sp-"].active,
+th[class^="sp-"].active,
+td[class*=" sp-"].active,
+th[class*=" sp-"].active {
     display: table-cell;
-    background-color: #ffffff;
-    color: #212121;
 }
 
 /* ── collapsed accordion children ── */
 tr.acc-child.collapsed { display: none; }
 
+/* ── Tab strip (proto-b "Segment Card") ──────────────────────────────────────
+   The sp-selector is a folder-tab strip sitting on the table's top edge: the
+   active tab loses its bottom border so it merges into the sheet surface
+   below, which is what makes switching a view read as flipping a folder
+   rather than pressing a button somewhere near a table. */
 .sp-selector {
     display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 11px 16px;
-    background: var(--t-bg-surface);
+    align-items: flex-end;
+    gap: 0;
+    padding: 10px 12px 0;
+    background: var(--t-bg-workspace);
     border-bottom: 1px solid var(--t-border);
     width: 100%;
     flex-wrap: nowrap;
     overflow-x: auto;
+    overflow-y: hidden;
+    /* The strip is empty until tabs exist; without this it collapses to a
+       hairline and the card's top edge looks broken. */
+    min-height: 12px;
 }
 
 .sp-option {
-    border-radius: 5px;
-    border: 1px solid var(--t-border-strong);
-
-    display: inline-block;
-    padding: 12px 25px;
-    background-color: inherit;
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 7px 16px;
+    border: 1px solid var(--t-border);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: var(--t-bg-workspace);
+    color: var(--t-text-muted);
     cursor: pointer;
-    text-align: center;
-    transition: background-color 0.3s ease, color 0.3s ease;
-    /* flex: auto; */
-}
-
-.sp-option:hover, .sp-option.active {
-    background-color: gray;
-    color: white;
+    transition: background 120ms ease, color 120ms ease;
+    position: relative;
+    top: 1px;                 /* overlap the sheet's top border */
+    margin-right: 2px;
+    white-space: nowrap;
+    user-select: none;
+    flex-shrink: 0;
+    font-family: inherit;
+    line-height: 1.4;
 }
 
 .sp-option:hover:not(.active) {
-    background: var(--t-bg-workspace);
+    background: var(--t-bg-surface);
     color: var(--t-text);
 }
 
-/* active pill: stronger border + black text, double-border trick */
 .sp-option.active {
-    border-color: var(--t-text);
-    color: var(--t-text);
-    font-weight: 600;
-    box-shadow: 0 0 0 0.5px var(--t-text);
     background: var(--t-bg-surface);
+    color: var(--t-primary);
+    font-weight: 600;
+    border-color: var(--t-border);
+    border-bottom-color: var(--t-bg-surface);   /* merges into the sheet */
+    z-index: 1;
+}
+
+/* Top-edge accent on the active tab */
+.sp-option.active::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    background: var(--t-primary);
+    border-radius: 0 0 2px 2px;
 }
 
 /* Hang */
@@ -281,25 +315,83 @@ tr.accordion-header.actives {
     box-sizing: border-box !important;
 } */
 
-/* ── accordion group header row ── */
+/* ── accordion group header row (proto-a "grpA1") ────────────────────────────
+   A group divider inside the sheet, not a box on top of it: a left accent bar
+   carries the open/closed state and intensifies on expand, so the hierarchy
+   comes from line weight rather than from a nested container. */
 tr.accordion-header > td {
-    background: var(--t-bg-workspace);
+    background: var(--t-bg-surface);
+    border-top: 2px solid var(--t-border);
     border-bottom: 1px solid var(--t-border);
-    border-top: 1px solid var(--t-border);
-    padding: 7px 14px;
+    border-left: none;
+    border-right: none;
+    padding: 6px 26px 6px 16px;
     cursor: pointer;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.55px;
+    letter-spacing: 0.5px;
     color: var(--t-text-muted);
-    transition: background 140ms;
+    text-align: left;
+    position: relative;
+    transition: background 150ms, color 150ms;
+}
+
+/* left accent bar */
+tr.accordion-header > td::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--t-primary);
+    border-radius: 0 2px 2px 0;
+    opacity: 0.55;
+    transition: opacity 150ms;
+}
+
+/* Chevron, drawn rather than authored: a row only becomes a group header when
+   someone applies the class, so the marker cannot live in the markup. */
+tr.accordion-header > td::after {
+    content: '▾';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    font-size: 10px;
+    opacity: 0.5;
+    transition: transform 150ms, opacity 150ms;
+    pointer-events: none;
 }
 
 tr.accordion-header.actives > td {
-    background: rgba(26,115,232,0.05);
+    background: var(--t-active-bg);
     color: var(--t-primary);
-    border-top-color: rgba(26,115,232,0.25);
+    border-top-color: var(--t-primary);
+}
+
+tr.accordion-header.actives > td::before { opacity: 1; }
+
+tr.accordion-header.actives > td::after {
+    transform: translateY(-50%) rotate(0deg);
+    opacity: 1;
+}
+
+/* A header row authored with its own chevron span keeps it; the drawn one
+   would then be a second arrow. */
+tr.accordion-header > td:has(.acc-chevron)::after { content: none; }
+
+.acc-chevron {
+    float: right;
+    font-size: 10px;
+    opacity: 0.5;
+    transition: transform 150ms;
+}
+
+tr.accordion-header.actives .acc-chevron {
+    transform: rotate(180deg);
+    opacity: 1;
 }
 
 .acc-count {
@@ -382,19 +474,58 @@ tr.accordion-header.actives > td {
     cursor: cell;
 }
 
-/* Empty cell placeholder; shown visually but not exported */
+/* An empty cell in a sheet is empty. The old 'Empty' placeholder was readable
+   as data, and now that Delete clears a cell instead of removing it, a cleared
+   column would have filled with the word. The zero-width space only holds the
+   cell's height open so a blank row does not collapse. */
 #tableContainer td:empty::before,
 #tableContainer th:empty::before {
-    content: 'Empty';
-    color: #bbb;
-    font-style: italic;
-    font-size: 0.85em;
+    content: '\200b';
     pointer-events: none;
 }
 
+/* ── Inline cell editor ──────────────────────────────────────────────────────
+   The editor replaces the cell's content in place, so it has to sit exactly
+   where the text was: same type, same alignment, no chrome of its own beyond
+   the focus ring that says you are typing. */
+.inline-cell-editor {
+    display: block;
+    font: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: var(--t-text);
+    background: var(--t-bg-surface);
+    border: none;
+    outline: 2px solid var(--t-primary);
+    outline-offset: 0;
+    border-radius: 0;
+    overflow: hidden;
+    white-space: pre-wrap;
+}
+
+.inline-cell-editor:focus {
+    outline: 2px solid var(--t-primary);
+}
+
+/* ── Selection (spreadsheet model) ───────────────────────────────────────────
+   A 4px border used to be the whole selection signal, which moved every cell
+   in the row by 3px the moment you clicked one. A sheet cannot reflow when you
+   select: the range is a background tint plus a hairline, both inset, and the
+   ACTIVE cell inside the range gets the solid ring — the same split Numbers and
+   Sheets use, where one cell is where typing lands and the rest is the range. */
 .selected-cell {
-    border: 4px solid rgba(28, 131, 90, 0.8) !important;
-    /* opacity: 0.5; */
+    background-color: var(--t-active-bg) !important;
+    box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.35);
+}
+
+.selected-cell.tf-active-cell {
+    background-color: var(--t-bg-surface) !important;
+    box-shadow: inset 0 0 0 2px var(--t-primary);
+}
+
+/* A lone selected cell IS the active cell — no range to tint behind it. */
+[data-theme="dark"] .selected-cell {
+    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.45);
 }
 
 .cell-controls {
@@ -623,7 +754,10 @@ tr.accordion-header.actives > td {
     overflow: visible; /* pills hang outside */
 }
 
-/* Middle row: row numbers + table viewport */
+/* Middle row: row numbers + table viewport.
+   The row-ruler viewport's height is set in JS from the table viewport's, the
+   way .tafne-col-ruler-vp's `flex: 1` gets its width from the same row — see
+   _syncRulerSegments for why `stretch` cannot do that job here. */
 .tafne-ruler-body {
     display: flex;
     flex-direction: row;
@@ -631,19 +765,40 @@ tr.accordion-header.actives > td {
     overflow: visible;
 }
 
-/* Row numbers strip — outside the horizontal scroll viewport, always visible */
-.tafne-row-ruler {
-    display: flex;
-    flex-direction: column;
+/* Viewport that clips the row ruler — scrollTop sync'd by JS.
+   The mirror of .tafne-col-ruler-vp. Without it the strip could not scroll,
+   so the moment the sheet scrolled vertically every row number pointed at a
+   row several rows above the one it named. */
+.tafne-row-ruler-vp {
+    overflow: hidden;
     flex-shrink: 0;
     width: 28px;
     background: var(--t-bg-surface);
     border-right: 1px solid var(--t-border);
-    overflow: visible; /* pills hang below each segment */
+}
+
+/* Row numbers strip (actual height = sum of row heights) */
+.tafne-row-ruler {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    background: var(--t-bg-surface);
+    overflow: visible;
 }
 
 .tafne-row-ruler .ruler-seg {
     overflow: visible; /* pill hangs outside segment bounds */
+}
+
+/* A frozen header row keeps its box pinned to the top of the viewport, so the
+   segment that names it has to be pinned too — otherwise the one row that
+   never moves is the one whose number scrolls away. Mirrors the `top: 0` on
+   .tafne-ruler-wrap .tablecoil thead th. */
+.tafne-row-ruler .ruler-seg.ruler-seg-frozen {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--t-bg-surface);
 }
 
 /* Table's own horizontal scroll container */
@@ -676,8 +831,8 @@ tr.accordion-header.actives > td {
     display: flex;
     align-items: center;
     justify-content: center;
-    /* width matches .tafne-corner / .tafne-row-ruler fixed width */
-    width: 28px;
+    /* Fills the strip, which is the one place the 28px width is declared. */
+    width: 100%;
     box-sizing: border-box;
     border-bottom: 1px solid var(--t-border);
     font-size: 10px;
@@ -855,7 +1010,7 @@ body.tf-resizing-row, body.tf-resizing-row * { cursor: row-resize !important; }
    still works; only the border edges and the node handles capture the mouse. */
 .tf-sel-overlay {
     position: fixed;
-    z-index: 9000;
+    /* z-index: 9000; */
     pointer-events: none;               /* interior passes clicks through to cells */
     box-sizing: border-box;
     outline: 2px solid var(--t-primary, #1c835a);
@@ -1015,9 +1170,9 @@ body.tf-no-select { user-select: none; -webkit-user-select: none; }
 }
 
 /* ── SPREADSHEET GRID ────────────────────────────────────────────────────────
-   The editor's own grid, borrowing the density of .lab-result-table (compact
-   padding, crisp 1px borders, sticky header) so it reads as a sheet rather
-   than as a rounded content card.
+   The editor's own grid, at the density of Lab Mode's .lab-result-table:
+   11px type, crisp 1px borders on every side, tight padding, sticky header.
+   That is what makes it read as a sheet rather than as a rounded content card.
 
    Scoped to .tafne-ruler-wrap on purpose: .tablecoil is also the class the
    document exporters emit, and an exported table should keep its document
@@ -1026,10 +1181,13 @@ body.tf-no-select { user-select: none; -webkit-user-select: none; }
     width: auto;
     min-width: 100%;
     border-collapse: collapse;
+    border-spacing: 0;
     border: none;
     border-radius: 0;
     table-layout: auto;
-    font-size: 12px;
+    font-size: 11px;
+    text-align: left;
+    background: var(--t-bg-surface);
 }
 
 /* A sized grid is exactly as wide as its columns say and no wider, so a narrow
@@ -1041,9 +1199,11 @@ body.tf-no-select { user-select: none; -webkit-user-select: none; }
 .tafne-ruler-wrap .tablecoil th,
 .tafne-ruler-wrap .tablecoil td {
     border: 1px solid var(--t-border);
-    padding: 4px 8px;
+    padding: 3px 8px;
     text-align: left;
     vertical-align: top;
+    color: var(--t-text);
+    background: var(--t-bg-surface);
     border-radius: 0 !important;
 }
 
@@ -1056,16 +1216,34 @@ body.tf-no-select { user-select: none; -webkit-user-select: none; }
     word-break: break-word;
 }
 
+/* Frozen header row — it stays put while the body scrolls under it. */
 .tafne-ruler-wrap .tablecoil thead th {
     position: sticky;
     top: 0;
     z-index: 2;
-    background: var(--t-bg-surface);
-    border-bottom: 1px solid var(--t-border);
-    padding: 5px 8px;
-    font-size: 11px;
+    background: var(--t-bg-workspace);
+    font-weight: 600;
+    color: var(--t-text);
+    padding: 4px 8px;
     white-space: nowrap;
+    text-transform: none;
+    letter-spacing: 0;
+    cursor: default;
 }
+
+.tafne-ruler-wrap .tablecoil thead th:hover {
+    background: var(--t-hover-bg);
+    color: var(--t-text);
+}
+
+/* No row-hover wash on a sheet: hovering a row in Numbers or Sheets does not
+   repaint it, and a wash here fights the selection tint for the same pixels. */
+.tafne-ruler-wrap .tablecoil tbody tr:hover td { background: var(--t-bg-surface); }
+.tafne-ruler-wrap .tablecoil td:hover { background: var(--t-bg-surface); font-weight: inherit; }
+.tafne-ruler-wrap .tablecoil tbody tr:hover td.selected-cell,
+.tafne-ruler-wrap .tablecoil td.selected-cell:hover { background: var(--t-active-bg); }
+.tafne-ruler-wrap .tablecoil tbody tr:hover td.selected-cell.tf-active-cell,
+.tafne-ruler-wrap .tablecoil td.selected-cell.tf-active-cell:hover { background: var(--t-bg-surface); }
 
 /* The rounded-corner rules above are decorative on a content card and wrong on
    a sheet: they clipped the first and last cell of every edge row. */
@@ -1082,8 +1260,18 @@ body.tf-no-select { user-select: none; -webkit-user-select: none; }
     border-bottom: 1px solid var(--t-border);
 }
 
+/* A group header row spans the sheet, so it opts out of the per-cell borders. */
+.tafne-ruler-wrap .tablecoil tr.accordion-header > td {
+    background: var(--t-bg-surface);
+    vertical-align: middle;
+}
+
+.tafne-ruler-wrap .tablecoil tr.accordion-header.actives > td {
+    background: var(--t-active-bg);
+}
+
 /* The table viewport scrolls both ways now that the grid can exceed it. */
 .tafne-table-vp {
     overflow: auto;
-    max-height: 70vh;
+    /* max-height: 70vh; */
 }

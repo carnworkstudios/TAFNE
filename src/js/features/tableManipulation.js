@@ -138,38 +138,74 @@ function initCrosshair() {
     });
 }
 
+/**
+ * Apply Style — put the current table into the sheet card look.
+ *
+ * This used to write a fixed appearance into style attributes: width 100%,
+ * 10px padding, centred text, lightgrey borders, #f2f2f2 headers. Inline
+ * styles win over every stylesheet, so a table that had been "styled" once
+ * could never follow the theme again — it stayed light-grey-on-white in dark
+ * mode, and it ignored the density the editor's own grid uses.
+ *
+ * So Apply Style now applies CLASSES and clears the inline styles the old one
+ * left behind. The look lives in tableEditor.css (.tablecoil inside
+ * .tafne-ruler-wrap) and follows the theme like everything else.
+ */
 function applyStyle() {
     if (!currentTable) return;
 
+    if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+
     const $table = $(currentTable);
 
-    // Add or ensure the table has the tablecoil class
-    if (!$table.hasClass('tablecoil')) {
-        $table.addClass('tablecoil');
+    $table.addClass('tablecoil');
+    if (!$table.hasClass('crosshair-table')) $table.addClass('crosshair-table');
+
+    // Undo the previous version's handiwork. Passing '' removes the declaration
+    // rather than setting it to an empty value, so the stylesheet takes over.
+    $table.css({
+        width: '',
+        'border-collapse': '',
+        'border-spacing': '',
+        border: '',
+        'table-layout': '',
+    });
+    $table.find('td, th').css({
+        padding: '',
+        'text-align': '',
+        border: '',
+        'background-color': '',
+        'font-weight': '',
+    });
+
+    // ── Card structure ───────────────────────────────────────────────────────
+    // A styled table is a card: title bar (.accordion) + body (.panel) with a
+    // tab strip along the top edge. A table parsed straight into the container
+    // has none of that, so build it; one already in a card keeps its own.
+    const $host  = $table.closest('.tafne-ruler-wrap').length
+        ? $table.closest('.tafne-ruler-wrap')
+        : $table;
+    let   $panel = $table.closest('.panel');
+
+    if (!$panel.length) {
+        const n = $('#tableContainer button.accordion').length + 1;
+        $host.wrap('<div class="panel"></div>');
+        $panel = $table.closest('.panel');
+        $panel.before('<button class="accordion active"><b>Table ' + n + '</b></button>');
+        $panel.show();
     }
 
-    // Apply some default styling
-    $table.css({
-        'width': '100%',
-        'border-collapse': 'separate',
-        'border-spacing': '0',
-        'border': '1px solid lightgrey'
-    });
-
-    // Style cells
-    $table.find('td, th').css({
-        'padding': '10px',
-        'text-align': 'center',
-        'border': '1px solid lightgrey'
-    });
-
-    // Style header cells
-    $table.find('th').css({
-        'background-color': '#f2f2f2',
-        'font-weight': 'bold'
-    });
+    // The tab strip is the card's top edge even with no tabs in it yet — an
+    // empty strip is the folder lip the active tab later sits on.
+    if (!$panel.children('.sp-selector').length) {
+        $panel.prepend('<div class="sp-selector"></div>');
+    }
 
     setupTableInteraction();
+
+    if (typeof window.renderTableRulers === 'function') {
+        requestAnimationFrame(() => window.renderTableRulers(currentTable));
+    }
 }
 
 // ===========================TEXT SPLIT FUNCTIONS AND TABLE EDITS===============================

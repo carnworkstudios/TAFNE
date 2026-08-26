@@ -87,3 +87,22 @@ class VisualGridMapper {
 
 // Make VisualGridMapper globally accessible
 window.VisualGridMapper = VisualGridMapper;
+
+/**
+ * Is this cell actually on screen?
+ *
+ * The grid is the table's STRUCTURE, and structure outlives visibility: an
+ * sp-* column that the active tab does not show is still a full column of
+ * cells in every row, still in `grid`, still returned by getCellsInRow. Any
+ * code that walks the grid and forgets to ask this question ends up selecting
+ * cells nobody can see, drawing a selection box around them (a display:none
+ * cell measures 0×0, so the box snaps to the viewport corner), or writing into
+ * a column that belongs to a different tab.
+ *
+ * getClientRects() is the honest test — it is empty for display:none and for a
+ * cell inside a collapsed accordion group alike, which are exactly the two ways
+ * a cell disappears here.
+ */
+window.isCellVisible = function (cell) {
+    return !!(cell && cell.getClientRects && cell.getClientRects().length > 0);
+};

@@ -44,12 +44,16 @@
     }
 
     // Viewport bounding rect that encloses grid cells [r0..r1]×[c0..c1].
+    //
+    // Hidden cells are skipped, not measured. A display:none cell reports a
+    // 0×0 rect at the viewport origin, so one sp- column inside the region was
+    // enough to drag the box's left edge to x=0 and stretch it across the page.
     function boundsForRegion(mapper, r0, c0, r1, c1) {
         let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
         for (let r = r0; r <= r1; r++) {
             for (let c = c0; c <= c1; c++) {
                 const gc = mapper.grid[r] && mapper.grid[r][c];
-                if (!gc) continue;
+                if (!gc || !window.isCellVisible(gc.element)) continue;
                 const rect = gc.element.getBoundingClientRect();
                 left = Math.min(left, rect.left);
                 top = Math.min(top, rect.top);
@@ -96,6 +100,9 @@
     // Recompute the overlay box from the live selection. Safe to call often.
     function updateSelectionHandles() {
         if (gestureActive) return; // don't fight an in-flight drag
+        // Every path that changes the selection lands here, so this is the one
+        // place that has to keep the active-cell ring on the right cell.
+        if (typeof window.syncActiveCell === 'function') window.syncActiveCell();
         const box = getSelectionBox();
         if (!box) { hideHandles(); return; }
 
@@ -126,7 +133,7 @@
         for (let r = r0; r <= clampR1; r++) {
             for (let c = c0; c <= clampC1; c++) {
                 const gc = mapper.grid[r] && mapper.grid[r][c];
-                if (gc && gc.isOrigin) {
+                if (gc && gc.isOrigin && window.isCellVisible(gc.element)) {
                     $(gc.element).addClass('selected-cell');
                     if (!window.selectedCells.includes(gc.element)) window.selectedCells.push(gc.element);
                 }
@@ -167,6 +174,9 @@
             for (let c = 0; c <= cols; c++) {
                 const gc = mapper.grid[destR + r] && mapper.grid[destR + r][destC + c];
                 if (!gc || !gc.isOrigin) return false;
+                // Landing on a column the active tab hides would move the block
+                // somewhere the user cannot see it.
+                if (!window.isCellVisible(gc.element)) return false;
                 const p = mapper.getVisualPosition(gc.element);
                 if (p.rowspan > 1 || p.colspan > 1) return false;
             }
@@ -222,6 +232,9 @@
                 if (r <= maxR && c <= maxC) continue; // inside source, untouched
                 const gc = mapper.grid[r] && mapper.grid[r][c];
                 if (!gc || !gc.isOrigin) return false;
+                // Filling across a hidden sp- column would write into the tab
+                // the user is not looking at, invisibly.
+                if (!window.isCellVisible(gc.element)) return false;
                 const p = mapper.getVisualPosition(gc.element);
                 if (p.rowspan > 1 || p.colspan > 1) return false;
             }

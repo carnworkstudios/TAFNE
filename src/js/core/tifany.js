@@ -195,12 +195,17 @@ $(function () {
             const minCol = Math.min(startPos.startCol, endPos.startCol);
             const maxCol = Math.max(startPos.startCol + startPos.colspan - 1, endPos.startCol + endPos.colspan - 1);
 
-            // Select all cells in the rectangle
+            // Select all cells in the rectangle.
+            //
+            // A column the active sp- tab does not show is skipped: it is still
+            // in the grid, so without this a range that merely spans across it
+            // picks up cells the user cannot see — which then get cleared by
+            // Delete, filled by a drag, and counted in the selection box.
             for (let r = minRow; r <= maxRow; r++) {
                 for (let c = minCol; c <= maxCol; c++) {
                     if (mapper.grid[r] && mapper.grid[r][c]) {
                         const cell = mapper.grid[r][c].element;
-                        if (mapper.grid[r][c].isOrigin) {
+                        if (mapper.grid[r][c].isOrigin && window.isCellVisible(cell)) {
                             $(cell).addClass('selected-cell');
                             if (!window.selectedCells.includes(cell)) {
                                 window.selectedCells.push(cell);
@@ -210,6 +215,136 @@ $(function () {
                 }
             }
         }
+
+
+        // ── Spreadsheet cell model ────────────────────────────────────────────
+        // Numbers and Sheets both split the selection in two: a RANGE that is
+        // tinted, and one ACTIVE cell inside it that typing lands in. Everything
+        // below keeps those two in sync, because without the second one there is
+        // no answer to "where does this keystroke go?" once a range is selected.
+
+        function activeCell() {
+            const head = window.selectionHeadCell;
+            if (head && window.selectedCells.includes(head)) return head;
+            return window.selectedCells[0] || null;
+        }
+
+        function syncActiveCell() {
+            $('#tableContainer .tf-active-cell').removeClass('tf-active-cell');
+            const cell = activeCell();
+            if (cell) $(cell).addClass('tf-active-cell');
+        }
+        window.syncActiveCell = syncActiveCell;
+
+        /** The next visible cell `dr` rows / `dc` cols away, skipping hidden ones. */
+        function neighbourCell(cell, dr, dc) {
+            if (!cell || !window.currentTable || (!dr && !dc)) return null;
+            const mapper = new VisualGridMapper($(window.currentTable));
+            const pos = mapper.getVisualPosition(cell);
+            if (!pos) return null;
+            const grid = mapper.grid || [];
+            // Step from the far edge of a merged cell so a 3-wide header does not
+            // walk back into itself on every Tab.
+            let r = dr > 0 ? pos.startRow + pos.rowspan - 1 : pos.startRow;
+            let c = dc > 0 ? pos.startCol + pos.colspan - 1 : pos.startCol;
+            for (let guard = 0; guard < 500; guard++) {
+                r += dr; c += dc;
+                const slot = grid[r] && grid[r][c];
+                if (!slot) return null;
+                const el = slot.element;
+                // A cell inside a collapsed group or an inactive sp-* column has
+                // no box; landing on it would put the caret somewhere invisible.
+                if (el !== cell && window.isCellVisible(el)) return el;
+            }
+            return null;
+        }
+
+        /** Make `cell` the active cell — replacing the range, or extending it. */
+        function focusCell(cell, extend) {
+            if (!cell || !window.currentTable) return;
+            const $table = $(window.currentTable);
+            if (extend) {
+                if (!window.selectionAnchorCell) window.selectionAnchorCell = activeCell() || cell;
+                window.selectionHeadCell = cell;
+                selectRange(window.selectionAnchorCell, window.selectionHeadCell);
+            } else {
+                $table.find('.selected-cell').removeClass('selected-cell');
+                window.selectedCells = [cell];
+                $(cell).addClass('selected-cell');
+                window.selectionAnchorCell = cell;
+                window.selectionHeadCell = cell;
+            }
+            lastSelectedCell = cell;
+            window.tableHasFocus = true;
+            syncActiveCell();
+            cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
+            if (typeof window.highlightRuler === 'function') window.highlightRuler(window.currentTable, window.selectedCells);
+            if (typeof window.populateStylesPanel === 'function') window.populateStylesPanel();
+        }
+        window.focusCell = focusCell;
+
+        /**
+         * Open the inline editor on a cell.
+         *
+         * `seed` is what a type-to-edit keystroke already produced: in a sheet
+         * you do not double-click first, you just start typing and the old value
+         * is gone. Passing it here is what makes that one gesture instead of two.
+         */
+        function beginCellEdit(cell, seed) {
+            if (!cell) return;
+            if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+
+            const $cell = $(cell);
+            window.cellBeingEdited = cell;
+            window.originalContent = $cell.html();
+
+            const existing = $('<div>').html($cell.html()).text();
+            const $input = $('<textarea>')
+                .addClass('inline-cell-editor')
+                .val(seed != null ? seed : existing)
+                .css({
+                    width: $cell.innerWidth(),
+                    height: $cell.innerHeight(),
+                    margin: 0,
+                    padding: 0,
+                    resize: 'none',
+                    'box-sizing': 'border-box',
+                });
+
+            $('.inline-cell-editor').remove();
+            $cell.empty().append($input);
+            $input.focus();
+            // Type-to-edit leaves the caret after the seed character; an explicit
+            // edit (dblclick / Enter / F2) selects the value so it can be replaced.
+            if (seed == null) $input.select();
+            else $input[0].setSelectionRange($input.val().length, $input.val().length);
+
+            $input.off('click.preventSave').on('click.preventSave', function (ev) { ev.stopPropagation(); });
+        }
+        window.beginCellEdit = beginCellEdit;
+
+        /** Write the editor's value back into its cell and close it. */
+        function commitCellEdit() {
+            const $editor = $('.inline-cell-editor');
+            if (!$editor.length) return null;
+            const $cell = $editor.closest('td, th');
+            $cell.html($('<div>').text($editor.val()).html());
+            $editor.remove();
+            window.cellBeingEdited = null;
+            window.originalContent = null;
+            return $cell[0] || null;
+        }
+        window.commitCellEdit = commitCellEdit;
+
+        /** Empty every selected cell — Delete in a sheet clears, it does not remove. */
+        function clearSelectedCells() {
+            if (!window.selectedCells.length) return;
+            if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+            window.selectedCells.forEach(c => { c.innerHTML = ''; });
+            if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
+        }
+        window.clearSelectedCells = clearSelectedCells;
 
         // Mobile long-press support
         let pressTimer;
@@ -324,6 +459,14 @@ $(function () {
         $(document).off('keydown').on('keydown', function (e) {
             if (e.repeat) return;
 
+            // The inline editor has its own key handling (commit and move) and
+            // is bound to this same document node, so which of the two runs
+            // first is an artefact of bind order — not something to depend on.
+            // A keystroke aimed at the editor is the editor's, full stop;
+            // without this, Tab moved two cells and Enter re-opened the editor
+            // on the cell it had just moved to.
+            if ($(e.target).hasClass('inline-cell-editor')) return;
+
             // Alt+D — toggle drag-and-drop (global, works outside table context)
             if (e.altKey && !e.shiftKey && e.code === 'KeyD') {
                 if (!$(e.target).is('input, textarea, select, [contenteditable="true"]')) {
@@ -363,50 +506,66 @@ $(function () {
                     window.selectionHeadCell = firstVisual;
                 }
 
-                const currentPos = mapper.getVisualPosition(currentCell);
-                if (!currentPos) return;
-
-                let targetRow = currentPos.startRow;
-                let targetCol = currentPos.startCol;
-
-                if (e.key === "ArrowUp") targetRow--;
-                if (e.key === "ArrowDown") targetRow++;
-                if (e.key === "ArrowLeft") targetCol--;
-                if (e.key === "ArrowRight") targetCol++;
-
-                const rowData = grid[targetRow];
-                const targetData = rowData ? rowData[targetCol] : null;
-                if (!targetData || !targetData.element) return;
+                // neighbourCell walks past hidden cells rather than landing on
+                // one: pressing → at the last visible column of a tab used to
+                // move the selection into the next sp- column, where it simply
+                // vanished — still selected, nowhere on screen.
+                const dr = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+                const dc = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+                const targetCell = neighbourCell(currentCell, dr, dc);
+                if (!targetCell) return;
 
                 e.preventDefault();
-                const targetCell = targetData.element;
-                if (e.shiftKey) {
-                    // Expand selection from an anchor to the moving head.
-                    if (!window.selectionAnchorCell) {
-                        window.selectionAnchorCell = currentCell;
-                    }
-                    window.selectionHeadCell = targetCell;
-                    selectRange(window.selectionAnchorCell, window.selectionHeadCell);
-                } else {
-                    // Move selection as a single active cell.
-                    $table.find('.selected-cell').removeClass('selected-cell');
-                    window.selectedCells = [targetCell];
-                    $(targetCell).addClass('selected-cell');
-                    window.selectionAnchorCell = targetCell;
-                    window.selectionHeadCell = targetCell;
-                }
-                targetCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                focusCell(targetCell, e.shiftKey);
                 return;
             }
 
             const key = e.key.toLowerCase();
             const ctrl = e.ctrlKey || e.metaKey;
 
+            // ── Spreadsheet keys ──────────────────────────────────────────────
+            // Tab / Enter / type-to-edit, the three gestures that separate a
+            // sheet from a table you have to reach for the mouse to change.
+            // Only when a cell is the active context and nothing is being typed
+            // into yet — the editor's own handler takes over from there.
+            if (isTableContext()) {
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const cell = activeCell();
+                    if (cell) focusCell(neighbourCell(cell, 0, e.shiftKey ? -1 : 1), false);
+                    return;
+                }
+                if (e.key === 'Enter' && !ctrl && !e.altKey) {
+                    e.preventDefault();
+                    beginCellEdit(activeCell());
+                    return;
+                }
+                if (e.key === 'F2') {
+                    e.preventDefault();
+                    beginCellEdit(activeCell());
+                    return;
+                }
+                // A printable key replaces the cell's value, the way it does in
+                // Numbers and Sheets. Modifier combinations fall through to the
+                // shortcuts below.
+                if (e.key.length === 1 && !ctrl && !e.altKey) {
+                    const cell = activeCell();
+                    if (cell) {
+                        e.preventDefault();
+                        beginCellEdit(cell, e.key);
+                        return;
+                    }
+                }
+            }
+
             if ((key === 'delete' || key === 'backspace') && !e.altKey && !e.shiftKey) {
-                // Delete/Backspace → scope-aware delete (row/col when ruler-selected, else cell)
+                // Delete/Backspace → clear the selected cells' contents.
+                // Structural removal is Shift+Delete (and the toolbar buttons):
+                // in a sheet, Delete empties a cell, it does not collapse the
+                // grid around it.
                 if (!isTableContext()) return;
                 e.preventDefault();
-                if (typeof deleteSelected === 'function') deleteSelected();
+                clearSelectedCells();
             } else if ((key === 'insert' || (ctrl && key === 'enter')) && !e.shiftKey && !e.repeat) {
                 // Insert or Ctrl/Cmd+Enter → scope-aware Add After
                 if (!isTableContext()) return;
@@ -431,11 +590,13 @@ $(function () {
                 $table.find('.selected-cell').removeClass('selected-cell');
                 window.selectedCells = [];
                 mapper.cellMap.forEach((info, cell) => {
+                    if (!window.isCellVisible(cell)) return;
                     $(cell).addClass('selected-cell');
                     window.selectedCells.push(cell);
                 });
                 window.selectionAnchorCell = window.selectedCells[0] || null;
-                window.selectionHeadCell = window.selectedCells[window.selectedCells.length - 1] || null;
+                window.selectionHeadCell = window.selectedCells[0] || null;
+                if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
             } else if (ctrl && !e.shiftKey && key === 'c') {
                 // Ctrl/Cmd+C → Copy selected cells (only in table context; falls through to system copy otherwise)
                 if (!isTableContext() || window.selectedCells.length === 0) return;
@@ -487,34 +648,7 @@ $(function () {
 
         // Double click to edit cell
         $container.off('dblclick.cell').on('dblclick.cell', 'td, th', function (e) {
-            //SAVE STATE BEFORE OPERATION
-            window.saveCurrentState();
-
-            window.cellBeingEdited = this;
-            window.originalContent = $(this).html();
-
-            const content = $(this).html();
-
-            const $input = $('<textarea>')
-                .addClass('inline-cell-editor')
-                .val($('<div>').html(content).text())
-                .css({
-                    width: $(this).innerWidth(),
-                    height: $(this).innerHeight(),
-                    margin: 0,
-                    padding: 0,
-                    resize: 'none',
-                    'box-sizing': 'border-box'
-                });
-
-            $('.inline-cell-editor').remove();
-            $(this).empty().append($input);
-            $input.focus().select();
-
-            $input.off('click.preventSave').on('click.preventSave', function (e) {
-                e.stopPropagation();
-            });
-
+            beginCellEdit(this);
             e.stopPropagation();
         });
 
@@ -617,39 +751,39 @@ $(function () {
             if ($(e.target).closest(window.cellBeingEdited).length) {
                 return;
             }
-            window.saveCurrentState();
-            const content = $('<span>').text($editor.val()).html();
-            $(window.cellBeingEdited).html(content);
-            $editor.remove();
-            window.cellBeingEdited = null;
-            window.originalContent = null;
+            commitCellEdit();
         });
 
-        // Save on Enter
+        // ── In-editor keys ────────────────────────────────────────────────────
+        // Commit and move: Enter down, Shift+Enter up, Tab right, Shift+Tab
+        // left. Committing without moving strands the user in the cell they
+        // just finished and makes filling a column a mouse job.
+        //
+        // Alt/Ctrl+Enter inserts a newline instead — a cell that can hold two
+        // lines needs some way to say so.
         $(document).off('keydown.cellEditor').on('keydown.cellEditor', '.inline-cell-editor', function (e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            const ctrl = e.ctrlKey || e.metaKey;
+
+            if (e.key === 'Enter' && !ctrl && !e.altKey) {
                 e.preventDefault();
-                const $editor = $(this);
-                const newContent = $('<div>').text($editor.val()).html();
-                const $cell = $editor.closest('td, th');
-                window.saveCurrentState();
-                $cell.html(newContent);
+                const cell = commitCellEdit();
+                if (cell) focusCell(neighbourCell(cell, e.shiftKey ? -1 : 1, 0) || cell, false);
+                return;
+            }
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const cell = commitCellEdit();
+                if (cell) focusCell(neighbourCell(cell, 0, e.shiftKey ? -1 : 1) || cell, false);
+                return;
+            }
+            if (e.key === 'Escape' && window.cellBeingEdited) {
+                e.preventDefault();
+                const cell = window.cellBeingEdited;
+                $(cell).html(window.originalContent);
+                $('.inline-cell-editor').remove();
                 window.cellBeingEdited = null;
-                $.toast({
-                    heading: 'Success',
-                    text: 'Cell edited successfully',
-                    icon: 'success',
-                    loader: false,
-                    stack: false
-                });
-            } else if (e.key === 'Escape' && window.cellBeingEdited) {
-                const $editor = $('.inline-cell-editor');
-                if ($editor.length > 0) {
-                    $(window.cellBeingEdited).html(window.originalContent);
-                    $editor.remove();
-                    window.cellBeingEdited = null;
-                    window.originalContent = null;
-                }
+                window.originalContent = null;
+                focusCell(cell, false);
             }
         });
 

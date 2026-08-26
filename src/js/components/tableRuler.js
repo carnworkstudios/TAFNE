@@ -12,6 +12,18 @@ window.tableRuler = (function () {
     // Duplicate-mode flag: when true the insert pill duplicates the row/col instead of inserting blank
     let _duplicateMode = false;
 
+    // ── Column labels ─────────────────────────────────────────────────────────
+    // A, B, … Z, AA, AB … — the spreadsheet convention. Numbers on the column
+    // strip and numbers on the row strip give a cell two coordinates that look
+    // alike ("3,4"); letters make an address readable the way B7 is.
+    function colLabel(idx) {
+        let s = '';
+        for (let n = idx; n >= 0; n = Math.floor(n / 26) - 1) {
+            s = String.fromCharCode(65 + (n % 26)) + s;
+        }
+        return s;
+    }
+
     // ── Sync ruler segment sizes to live cell dimensions post-layout ─────────
     // Called after the wrap is in the DOM so getBoundingClientRect is accurate.
     // Row segments: height matches each <tr> height.
@@ -70,6 +82,24 @@ window.tableRuler = (function () {
                 $(this).css({ 'min-width': avg + 'px', 'max-width': avg + 'px', width: avg + 'px', display: '' });
             }
         });
+
+        // The row-ruler viewport has to be exactly as tall as the table
+        // viewport, or scrollTop means something different on each side and the
+        // numbers drift out of phase with the rows they name.
+        //
+        // It cannot be left to `align-items: stretch`: the strip's own content
+        // is as tall as the whole table, so under stretch the flex line would
+        // size to THAT and the viewport would never clip. The measurement has
+        // to come from the sibling.
+        const tableVp    = wrap.querySelector('.tafne-table-vp');
+        const rowRulerVp = wrap.querySelector('.tafne-row-ruler-vp');
+        // A zero height means the card is collapsed or offscreen, not that the
+        // strip should be one pixel tall — pinning it there would leave the
+        // ruler blank when the panel reopens.
+        if (tableVp && rowRulerVp && tableVp.clientHeight > 0) {
+            rowRulerVp.style.height = tableVp.clientHeight + 'px';
+            rowRulerVp.scrollTop    = tableVp.scrollTop;
+        }
     }
 
     // ── Column / row sizing ───────────────────────────────────────────────────
@@ -269,7 +299,10 @@ window.tableRuler = (function () {
 
     // ── Apply a ruler-driven selection (row or column) ────────────────────────
     function _applyRulerSelection(table, cells, type) {
-        const filtered = cells.filter(c => !$(c).hasClass('drag-handle'));
+        // A row spans every column, including the ones the active sp- tab
+        // hides — so selecting a row by its number used to pick up cells from
+        // the other tabs, which Delete then cleared out of sight.
+        const filtered = cells.filter(c => !$(c).hasClass('drag-handle') && window.isCellVisible(c));
         $(table).find('.selected-cell').removeClass('selected-cell');
         filtered.forEach(c => $(c).addClass('selected-cell'));
         window.selectedCells       = filtered;
@@ -281,6 +314,9 @@ window.tableRuler = (function () {
         requestAnimationFrame(() => {
             if (typeof window.highlightRuler === 'function') {
                 window.highlightRuler(table, window.selectedCells);
+            }
+            if (typeof window.updateSelectionHandles === 'function') {
+                window.updateSelectionHandles();
             }
         });
     }
@@ -524,12 +560,15 @@ window.tableRuler = (function () {
         // Each segment carries a grip on its trailing border: drag to size the
         // column/row, double-click a column grip to fit it to its content.
         const colSegs = Array.from({ length: nCols }, (_, i) =>
-            `<div class="ruler-seg" data-col="${i}" title="Col ${i + 1}">${i + 1}<span class="ruler-insert-pill" data-col="${i}" title="${_pillColTitle()}">${pillLabel}</span><span class="ruler-grip ruler-grip-col" title="Drag to resize · double-click to fit"></span></div>`
+            `<div class="ruler-seg" data-col="${i}" title="Column ${colLabel(i)}">${colLabel(i)}<span class="ruler-insert-pill" data-col="${i}" title="${_pillColTitle()}">${pillLabel}</span><span class="ruler-grip ruler-grip-col" title="Drag to resize · double-click to fit"></span></div>`
         ).join('');
 
-        const rowSegs = Array.from({ length: nRows }, (_, i) =>
-            `<div class="ruler-seg" data-row="${i}" title="Row ${i + 1}">${i + 1}<span class="ruler-insert-pill" data-row="${i}" title="${_pillRowTitle()}">${pillLabel}</span><span class="ruler-grip ruler-grip-row" title="Drag to resize"></span></div>`
-        ).join('');
+        // A row inside <thead> is frozen by the stylesheet, so its segment is
+        // frozen too — see .ruler-seg-frozen.
+        const rowSegs = Array.from({ length: nRows }, (_, i) => {
+            const frozen = rows[i] && rows[i].parentNode && rows[i].parentNode.tagName === 'THEAD' ? ' ruler-seg-frozen' : '';
+            return `<div class="ruler-seg${frozen}" data-row="${i}" title="Row ${i + 1}">${i + 1}<span class="ruler-insert-pill" data-row="${i}" title="${_pillRowTitle()}">${pillLabel}</span><span class="ruler-grip ruler-grip-row" title="Drag to resize"></span></div>`;
+        }).join('');
 
         // Assemble wrapper:
         //   header  = [corner | col-ruler-viewport (overflow:hidden, sync'd by JS)]
@@ -543,7 +582,9 @@ window.tableRuler = (function () {
                     </div>
                 </div>
                 <div class="tafne-ruler-body">
-                    <div class="tafne-row-ruler">${rowSegs}</div>
+                    <div class="tafne-row-ruler-vp">
+                        <div class="tafne-row-ruler">${rowSegs}</div>
+                    </div>
                     <div class="tafne-table-vp"></div>
                 </div>
             </div>
@@ -558,11 +599,16 @@ window.tableRuler = (function () {
 
         _wireResize($wrap, table);
 
-        // Sync horizontal scroll: table-vp → col-ruler-vp
+        // Sync scroll: table-vp → col-ruler-vp (x) and row-ruler-vp (y).
+        // Both strips live outside the table's own scroll container so they can
+        // stay put while it scrolls sideways/down; the price is that the offset
+        // has to be copied across by hand, on both axes.
         const tableVp    = $wrap.find('.tafne-table-vp')[0];
         const colRulerVp = $wrap.find('.tafne-col-ruler-vp')[0];
+        const rowRulerVp = $wrap.find('.tafne-row-ruler-vp')[0];
         tableVp.addEventListener('scroll', function () {
             colRulerVp.scrollLeft = this.scrollLeft;
+            rowRulerVp.scrollTop  = this.scrollTop;
         }, { passive: true });
 
         // Apply current dup-mode state
@@ -872,10 +918,11 @@ window.tableRuler = (function () {
         }
     }
 
-    return { renderTableRulers, highlightRuler, destroyRulers, releaseSizing };
+    return { renderTableRulers, highlightRuler, destroyRulers, releaseSizing, colLabel };
 })();
 
 window.renderTableRulers = window.tableRuler.renderTableRulers;
 window.highlightRuler    = window.tableRuler.highlightRuler;
 window.destroyRulers     = window.tableRuler.destroyRulers;
 window.releaseTableSizing = window.tableRuler.releaseSizing;
+window.tafneColLabel      = window.tableRuler.colLabel;

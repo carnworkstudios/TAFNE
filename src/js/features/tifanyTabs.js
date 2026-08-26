@@ -49,6 +49,27 @@ function headerAccordion() {
 
 
 /**
+ * Drop selected cells that the current sp- tab no longer shows.
+ *
+ * Selecting a cell on one tab and switching to another used to leave it
+ * selected while invisible: the selection overlay stayed parked over whichever
+ * columns now occupy that space, and Delete would clear a cell on a tab the
+ * user was not looking at. A selection has to be something you can see.
+ */
+function pruneHiddenSelection(table) {
+    const kept = (window.selectedCells || []).filter(window.isCellVisible);
+    if (kept.length === (window.selectedCells || []).length) return;
+
+    $(table).find('.selected-cell').not(kept).removeClass('selected-cell');
+    window.selectedCells = kept;
+    if (!window.isCellVisible(window.selectionAnchorCell)) window.selectionAnchorCell = kept[0] || null;
+    if (!window.isCellVisible(window.selectionHeadCell))   window.selectionHeadCell   = kept[kept.length - 1] || null;
+    if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
+    if (typeof window.populateStylesPanel === 'function') window.populateStylesPanel();
+}
+window.pruneHiddenSelection = pruneHiddenSelection;
+
+/**
  * Wires up the column-hiding functionality based on the .sp-option selectors.
  */
 function initSpSelectors() {
@@ -68,10 +89,14 @@ function initSpSelectors() {
         table.find(`.sp-${spValue}`).addClass('active');
 
         // Column visibility changed — rebuild the ruler so hidden columns'
-        // segments hide with them and widths resync to the new layout.
+        // segments hide with them and widths resync to the new layout, and
+        // drop any selection the switch just hid.
         const tbl = table[0];
-        if (tbl && typeof window.renderTableRulers === 'function') {
-            requestAnimationFrame(() => window.renderTableRulers(tbl));
+        if (tbl) {
+            requestAnimationFrame(() => {
+                pruneHiddenSelection(tbl);
+                if (typeof window.renderTableRulers === 'function') window.renderTableRulers(tbl);
+            });
         }
     });
 }
