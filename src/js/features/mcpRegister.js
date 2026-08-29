@@ -176,6 +176,7 @@
         // counted facts about the active sheet, nothing generated.
         { name: 'gx_report', group: 'report', doc: 'Deterministic findings and measured statistics for the active sheet.',
           params: { scope: { type: 'enum', values: ['verify', 'analyze', 'both'] } } },
+        { name: 'gx_tags', group: 'report', doc: 'Read-only citable tags for grounded chat retrieval.', params: {} },
         { name: 'add_sheet_node', group: 'node', doc: 'Add the current/named sheet as a table node.', params: { sheet: { type: 'string' } } },
         { name: 'connect_nodes', group: 'node', doc: 'Wire one node’s output into another node’s input (references are node labels or ids). Ports are auto-picked from each node’s direction.',
           params: { from: { type: 'string', doc: 'source node label or id' }, to: { type: 'string', doc: 'target node label or id' } } },
@@ -345,6 +346,10 @@
         // or mode, so a report can never have a side effect on the document it
         // is describing.
         if (name === 'gx_report') return _gxReport(op.scope || 'both');
+        if (name === 'gx_tags') {
+            var gx = _gxReport('both');
+            return { tags: (gx.findings || []).map(function (f) { return { id: 'tag:tafne:' + f.id, kind: 'finding', value: f.title, score: null, source: 'deterministic-report', tool: 'tifany', stage: 'validation' }; }) };
+        }
 
         // set_mode first (no sheet resolution).
         if (name === 'set_mode') {
