@@ -62,7 +62,7 @@ window.nodeConfigPanel = (function () {
             </div>`;
 
         const body = panel.querySelector('#neConfigBody');
-        const renderers = { filter: _renderFilter, vlookup: _renderVlookup, formula: _renderFormula, join: _renderJoin, api: _renderApi };
+        const renderers = { filter: _renderFilter, condition: _renderCondition, vlookup: _renderVlookup, formula: _renderFormula, join: _renderJoin, diff: _renderDiff, api: _renderApi };
         const renderer  = renderers[node.nodeType];
         if (renderer) renderer(body, node);
         else body.innerHTML = '<p style="color:var(--t-text-muted);padding:12px;">No configuration for this node type.</p>';
@@ -82,13 +82,41 @@ window.nodeConfigPanel = (function () {
     // ── Filter config ──────────────────────────────────────────────────────────
 
     function _renderFilter(body, node) {
+        _renderRowTest(body, node, {
+            columnLabel: 'Column to filter',
+            footer: ''
+        });
+    }
+
+    // ── Condition config (PRO: node-condition) ─────────────────────────────────
+    //
+    //  Same row test as filter — reusing the renderer keeps the operator list
+    //  from drifting between the two. Only the framing differs: filter discards
+    //  the rows that fail, condition routes them out a second port.
+
+    function _renderCondition(body, node) {
+        _renderRowTest(body, node, {
+            columnLabel: 'Column to test',
+            footer: `
+            <div class="ne-config-field">
+                <div class="ne-config-hint">
+                    Outputs two tables: <strong>Match</strong> for rows passing the test,
+                    <strong>No Match</strong> for the rest. Nothing is discarded.
+                </div>
+            </div>`
+        });
+    }
+
+    // Shared column/operator/value editor. Both filter and condition write the
+    // same three config keys, so they share one set of field ids.
+    function _renderRowTest(body, node, opts) {
         // Collect all input columns from wired source nodes
         const portOptions = _getInputPortOptions(node);
         const cfg = node.config || {};
 
         body.innerHTML = `
             <div class="ne-config-field">
-                <label>Column to filter</label>
+                <label>${opts.columnLabel}</label>
                 <select id="cfgFilterColumn">
                     <option value="">— select column —</option>
                     ${portOptions.map(p => `<option value="${_esc(p.portId)}" ${cfg.column === p.portId ? 'selected' : ''}>${_esc(p.label)}</option>`).join('')}
@@ -105,7 +133,7 @@ window.nodeConfigPanel = (function () {
             <div class="ne-config-field">
                 <label>Value</label>
                 <input type="text" id="cfgFilterValue" value="${_esc(cfg.value || '')}" placeholder="e.g. 100  or  ^A">
-            </div>`;
+            </div>${opts.footer || ''}`;
     }
 
     // ── VLookup config ─────────────────────────────────────────────────────────
@@ -164,14 +192,17 @@ window.nodeConfigPanel = (function () {
     function _renderFormula(body, node) {
         const inPorts = _getInputPortOptions(node);
         const cfg = node.config || {};
-        const colHints = inPorts.map(p => `<kbd>$${p.label}</kbd>`).join(' ');
+        // Use the same compact, scrollable pill strip as the class panel.
+        // Every input column stays available, so a formula can reference any
+        // combination instead of being limited to one selected field.
+        const colHints = inPorts.map(p => `<span class="tf-class-pill ne-formula-col" role="button" tabindex="0" data-column="${_esc(p.label)}">${_esc(p.label)}</span>`).join('');
 
         body.innerHTML = `
             <div class="ne-config-field">
                 <label>Expression</label>
                 <input type="text" id="cfgFormulaExpr" value="${_esc(cfg.expression || '')}"
                     placeholder="e.g. $Price * $Qty" style="font-family:monospace;">
-                ${colHints ? `<div class="ne-config-hint">Available: ${colHints}</div>` : ''}
+                ${colHints ? `<div class="ne-config-hint"><span>Insert columns:</span><div class="tf-class-pills ne-formula-cols">${colHints}</div></div>` : ''}
                 <div class="ne-config-error" id="cfgFormulaError" style="display:none;"></div>
             </div>
             <div class="ne-config-field">
@@ -185,9 +216,83 @@ window.nodeConfigPanel = (function () {
             if (err) { errEl.textContent = err; errEl.style.display = 'block'; }
             else     { errEl.style.display = 'none'; }
         });
+        // Delegated on the strip, so the listener count does not scale with the
+        // column count and pills re-rendered later stay live.
+        const exprInput = body.querySelector('#cfgFormulaExpr');
+        function insertColumnReference(pill) {
+            const name  = pill.dataset.column || '';
+            const token = /^[A-Za-z0-9_]+$/.test(name) ? '$' + name : '${' + name.replace(/}/g, '\\}') + '}';
+            const start = exprInput.selectionStart == null ? exprInput.value.length : exprInput.selectionStart;
+            const end   = exprInput.selectionEnd == null ? start : exprInput.selectionEnd;
+            exprInput.value = exprInput.value.slice(0, start) + token + exprInput.value.slice(end);
+            exprInput.setSelectionRange(start + token.length, start + token.length);
+            exprInput.focus();
+            exprInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        const strip = body.querySelector('.ne-formula-cols');
+        if (strip) {
+            strip.addEventListener('click', function (e) {
+                const pill = e.target.closest('.ne-formula-col');
+                if (pill) insertColumnReference(pill);
+            });
+            strip.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                const pill = e.target.closest('.ne-formula-col');
+                if (!pill) return;
+                e.preventDefault();
+                insertColumnReference(pill);
+            });
+        }
     }
 
     // ── Join config ────────────────────────────────────────────────────────────
+
+    // ── Diff config ──────────────────────────────────────────────
+    //
+    //  Reuses the join helpers: both nodes resolve two NAMED inputs rather than
+    //  the flat blended input map, so the same lookup answers "what is wired to
+    //  this side".
+
+    function _renderDiff(body, node) {
+        const cfg         = node.config || {};
+        const beforeCols  = _getJoinSourceCols(node, 'diff-in-before');
+        const afterCols   = _getJoinSourceCols(node, 'diff-in-after');
+        const beforeLabel = _getJoinSourceLabel(node, 'diff-in-before');
+        const afterLabel  = _getJoinSourceLabel(node, 'diff-in-after');
+
+        // Only columns present on BOTH sides can identify a row across versions.
+        const keyable = (beforeCols || []).filter(
+            c => (afterCols || []).some(a => a.label === c.label)
+        );
+
+        body.innerHTML = `
+            <div class="ne-config-field">
+                <label>Wired versions</label>
+                <div class="ne-join-wire-status">
+                    <span class="ne-join-side ${beforeCols ? 'ne-join-connected' : 'ne-join-missing'}">◀ Before: ${beforeLabel || 'not connected'}</span>
+                    <span class="ne-join-side ${afterCols ? 'ne-join-connected' : 'ne-join-missing'}">After: ${afterLabel || 'not connected'} ▶</span>
+                </div>
+            </div>
+            <div class="ne-config-field">
+                <label>Identity column</label>
+                <select id="cfgDiffKey">
+                    <option value="">— select —</option>
+                    ${keyable.map(c => `<option value="${_esc(c.portId)}" ${cfg.keyColumn === c.portId ? 'selected' : ''}>${_esc(c.label)}</option>`).join('')}
+                </select>
+                <div class="ne-config-hint">
+                    ${keyable.length
+                        ? 'The column that identifies the same row across both versions — an id or account number, not a value that changes.'
+                        : 'Wire both versions first. Only columns present in both can identify a row.'}
+                </div>
+            </div>
+            <div class="ne-config-field">
+                <div class="ne-config-hint">
+                    Outputs three tables: <strong>Added</strong>, <strong>Removed</strong> and
+                    <strong>Modified</strong>. Wire any port under a heading to carry that table onward.
+                </div>
+            </div>`;
+    }
 
     function _renderJoin(body, node) {
         const cfg       = node.config || {};
@@ -302,6 +407,7 @@ window.nodeConfigPanel = (function () {
 
         switch (node.nodeType) {
             case 'filter':
+            case 'condition':
                 node.config = { column: get('cfgFilterColumn'), operator: get('cfgFilterOp'), value: get('cfgFilterValue') };
                 break;
             case 'vlookup':
@@ -317,6 +423,19 @@ window.nodeConfigPanel = (function () {
                 node.config = { expression: expr, outputLabel: get('cfgFormulaOutputLabel') || 'Result' };
                 break;
             }
+            case 'diff': {
+                // Three tables leave this node, so a single column list would
+                // misdescribe it. Name the outputs instead.
+                const b = (_getJoinSourceCols(node, 'diff-in-before') || []).map(c => c.label);
+                const a = (_getJoinSourceCols(node, 'diff-in-after')  || []).map(c => c.label);
+                if (b.length && a.length) {
+                    cols = [...new Set([...a, 'Changed Columns'])];
+                    note = 'Three outputs: Added and Modified carry After columns, Removed carries Before columns.';
+                } else {
+                    note = 'Wire both Before and After to see the output shape.';
+                }
+                break;
+            }
             case 'api': {
                 let headers = {};
                 try { headers = JSON.parse(get('cfgApiHeaders') || '{}'); } catch (_) {}
@@ -325,6 +444,9 @@ window.nodeConfigPanel = (function () {
             }
             case 'join':
                 node.config = { mode: get('cfgJoinMode') || 'stack', leftKey: get('cfgJoinLeftKey'), rightKey: get('cfgJoinRightKey') };
+                break;
+            case 'diff':
+                node.config = { keyColumn: get('cfgDiffKey') };
                 break;
         }
 
@@ -356,6 +478,10 @@ window.nodeConfigPanel = (function () {
             case 'filter':
                 cols = inLabels;
                 note = 'Same columns, fewer rows.';
+                break;
+            case 'condition':
+                cols = inLabels;
+                note = 'Two outputs: Match and No Match. Same columns, rows split between them.';
                 break;
             case 'vlookup':
                 cols = [...inLabels, (val('cfgVlOutputLabel') || node.config?.outputLabel || 'Lookup Result')];

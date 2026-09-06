@@ -42,8 +42,11 @@ window.nodeFormulaParser = (function () {
 
             // Number
             if (/[0-9]/.test(src[i]) || (src[i] === '.' && /[0-9]/.test(src[i + 1]))) {
-                let n = '';
-                while (i < src.length && /[0-9.]/.test(src[i])) n += src[i++];
+                let n = '', dots = 0;
+                while (i < src.length && /[0-9.]/.test(src[i])) {
+                    if (src[i] === '.' && ++dots > 1) throw new Error('Invalid number near "' + n + '."');
+                    n += src[i++];
+                }
                 tokens.push({ t: TT.NUM, v: parseFloat(n) });
                 continue;
             }
@@ -56,6 +59,7 @@ window.nodeFormulaParser = (function () {
                     if (src[i] === '\\' && i + 1 < src.length) { i++; s += src[i++]; }
                     else s += src[i++];
                 }
+                if (i >= src.length) throw new Error('Unclosed string');
                 i++; // closing '
                 tokens.push({ t: TT.STR, v: s });
                 continue;
@@ -72,10 +76,12 @@ window.nodeFormulaParser = (function () {
                         if (src[i] === '\\' && src[i + 1] === '}') { i++; name += src[i++]; }
                         else name += src[i++];
                     }
+                    if (i >= src.length) throw new Error('Unclosed column reference');
                     i++; // skip }
                 } else {
                     while (i < src.length && /[\w]/.test(src[i])) name += src[i++];
                 }
+                if (!name) throw new Error('Column name is missing after $');
                 tokens.push({ t: TT.COL, v: '$' + name });
                 continue;
             }
@@ -101,8 +107,7 @@ window.nodeFormulaParser = (function () {
             if (ch === ')') { tokens.push({ t: TT.RPAREN }); i++; continue; }
             if (ch === ',') { tokens.push({ t: TT.COMMA  }); i++; continue; }
 
-            // Unknown — skip
-            i++;
+            throw new Error('Unexpected character "' + src[i] + '"');
         }
         tokens.push({ t: TT.EOF });
         return tokens;
@@ -131,7 +136,7 @@ window.nodeFormulaParser = (function () {
     //   and        → cmp  ( '&&' cmp )*
     //   cmp        → add  ( ('=='|'!='|'>'|'<'|'>='|'<=') add )?
     //   add        → mul  ( ('+'|'-') mul )*
-    //   mul        → unary ( ('*'|'/'|'%'|'**') unary )*
+    //   mul        → unary ( ('*'|'/'|'%') unary )*
     //   unary      → ('-'|'!') unary | atom
     //   atom       → NUM | STR | COL | call | '(' expr ')'
 
@@ -196,7 +201,7 @@ window.nodeFormulaParser = (function () {
 
     Parser.prototype.mul   = function () {
         let v = this.unary();
-        const mulOps = ['*', '/', '%', '**'];
+        const mulOps = ['*', '/', '%'];
         while (this.peek().t === TT.OP && mulOps.includes(this.peek().v)) {
             const op = this.next().v;
             const r  = this.unary();
@@ -204,7 +209,6 @@ window.nodeFormulaParser = (function () {
                 case '*':  v = _numOp(v, r, (a, b) => a * b); break;
                 case '/':  v = _numOp(v, r, (a, b) => b === 0 ? null : a / b); break;
                 case '%':  v = _numOp(v, r, (a, b) => b === 0 ? null : a % b); break;
-                case '**': v = _numOp(v, r, (a, b) => Math.pow(a, b)); break;
             }
         }
         return v;
@@ -222,7 +226,17 @@ window.nodeFormulaParser = (function () {
             const v = this.unary();
             return _bool(v) ? 'false' : 'true';
         }
-        return this.atom();
+        return this.power();
+    };
+
+    // Exponentiation binds tighter than multiplication and is right-associative.
+    Parser.prototype.power = function () {
+        let v = this.atom();
+        if (this.peek().t === TT.OP && this.peek().v === '**') {
+            this.next();
+            v = _numOp(v, this.unary(), (a, b) => Math.pow(a, b));
+        }
+        return v;
     };
 
     Parser.prototype.atom  = function () {
@@ -320,6 +334,7 @@ window.nodeFormulaParser = (function () {
             const tokens = tokenize(expr);
             const parser = new Parser(tokens, rowCtx || {});
             const result = parser.expr();
+            if (parser.peek().t !== TT.EOF) return '#ERR';
             return result;
         } catch (_) {
             return '#ERR';

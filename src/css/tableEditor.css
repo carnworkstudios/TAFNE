@@ -726,17 +726,10 @@ tr.accordion-header.actives .acc-chevron {
     color: var(--t-text-muted);
     user-select: none;
 }
-/* Show a tiny "+" label in insert mode so the corner communicates its action */
+/* Crosshair-ish glyph: the corner selects the whole table and drags it. */
 .tafne-corner::after {
-    content: '+';
-}
-/* Duplicate-mode: corner turns accent blue, shows ⎘ */
-.tafne-ruler-wrap.ruler-dup-mode .tafne-corner {
-    background: var(--t-primary);
-    color: #fff;
-}
-.tafne-ruler-wrap.ruler-dup-mode .tafne-corner::after {
-    content: '⎘';
+    content: '\25F1';
+    font-size: 11px;
 }
 
 /* Viewport that clips the col ruler — scrollLeft sync'd by JS */
@@ -950,59 +943,109 @@ body.tf-resizing-row, body.tf-resizing-row * { cursor: row-resize !important; }
 .tafne-col-ruler .ruler-seg.ruler-drop-before::before { left: -2px; }
 .tafne-col-ruler .ruler-seg.ruler-drop-after::after   { right: -2px; }
 
-/* ── Insert / duplicate pill ────────────────────────────────────────────── */
+/* ── Header caret + row/column action menu ───────────────────────────────── */
 
-/* Base pill — hidden until parent segment is hovered */
-.ruler-insert-pill {
+/* Caret sits inside the segment and appears on hover, the way a spreadsheet
+   header reveals its menu. It replaced a `+` pill whose meaning depended on a
+   global insert/duplicate mode that was invisible from the segment itself. */
+/* A bare chevron, not a chip. Numbers draws this as a plain muted glyph on the
+   segment itself — a filled pill reads as a button that does something on its
+   own, when all it does is reveal a menu. */
+.ruler-menu-caret {
     position: absolute;
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 12px;
+    height: 12px;
     font-size: 9px;
-    font-weight: 700;
     line-height: 1;
-    background: var(--t-primary);
-    color: #fff;
-    border-radius: 999px;
+    background: transparent;
+    color: var(--t-text-muted, #8a8a8a);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.12s, transform 0.12s;
+    transition: opacity 0.1s, color 0.1s;
     z-index: 5;
     cursor: pointer;
     user-select: none;
 }
 
-/* Show on parent hover */
-.ruler-seg:hover > .ruler-insert-pill {
+.ruler-menu-caret:hover,
+.ruler-menu-caret.is-open {
+    color: var(--t-text, #202020);
+}
+
+/* Hover only — never on .ruler-active. Selecting a row/column (and the corner
+   selects EVERY one) would otherwise light up a caret on each selected segment
+   at once, turning the strip into a column of blue squares. The caret marks
+   where the pointer is, not what is selected. The open menu keeps its own caret
+   lit so the menu stays visually anchored to the segment it acts on. */
+.ruler-seg:hover > .ruler-menu-caret,
+.ruler-seg > .ruler-menu-caret.is-open {
     opacity: 1;
     pointer-events: auto;
 }
 
-/* Row ruler pill: bottom centre, but INSIDE the segment.
-   It used to straddle the boundary at bottom:-7px, which is exactly where the
-   resize grip now lives — two affordances fighting for the same 7px, and the
-   pill won because it paints later. Sitting just inside still reads as
-   "insert after this row" and leaves the boundary to the grip. */
-.tafne-row-ruler .ruler-seg .ruler-insert-pill {
-    width: 14px;
-    height: 14px;
+/* Row caret: bottom-centre, inside the segment so it never fights the resize
+   grip that owns the boundary itself. */
+.tafne-row-ruler .ruler-seg .ruler-menu-caret {
     bottom: 3px;
     left: 50%;
     transform: translateX(-50%);
 }
 
-/* Col ruler pill: right centre, but INSIDE the segment — see the row pill. */
-.tafne-col-ruler .ruler-seg .ruler-insert-pill {
-    width: 14px;
-    height: 14px;
+/* Col caret: right-centre, inside the segment — same reason. */
+.tafne-col-ruler .ruler-seg .ruler-menu-caret {
     right: 3px;
     top: 50%;
     transform: translateY(-50%);
 }
 
-/* Duplicate mode: wrap gets .ruler-dup-mode; pills turn amber */
-.tafne-ruler-wrap.ruler-dup-mode .ruler-insert-pill {
-    background: var(--t-warning, #f59e0b);
+/* The menu itself — body-level and fixed, positioned by JS. */
+.tafne-hdr-menu {
+    position: fixed;
+    z-index: 10050;
+    min-width: 178px;
+    padding: 4px;
+    background: var(--t-bg-surface, #fff);
+    border: 1px solid var(--t-border, #d0d0d0);
+    border-radius: 6px;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.17);
+    font-size: 12px;
+}
+
+.tafne-hdr-menu-item {
+    display: block;
+    width: 100%;
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--t-text, #202020);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.tafne-hdr-menu-item:hover {
+    background: var(--t-primary, #2f6fed);
+    color: #fff;
+}
+
+.tafne-hdr-menu-item.is-danger { color: var(--t-danger, #d33); }
+.tafne-hdr-menu-item.is-danger:hover { background: var(--t-danger, #d33); color: #fff; }
+
+.tafne-hdr-menu-sep {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--t-border, #e2e2e2);
+}
+
+/* Corner reads as a control: it selects the whole table, and drags it. */
+.tafne-corner:hover {
+    background: var(--t-primary, #2f6fed);
+    color: #fff;
 }
 
 /* ============================ SELECTION HANDLES (move / merge / fill) ============================ */
@@ -1274,4 +1317,130 @@ body.tf-no-select { user-select: none; -webkit-user-select: none; }
 .tafne-table-vp {
     overflow: auto;
     /* max-height: 70vh; */
+}
+
+/* ============================ TABLE CANVAS (infinite surface) ============================ */
+/* The Numbers model: a sheet is a canvas holding free-floating tables, not a document that
+   stacks them. Viewport clips and owns the cursor; surface carries the transform. */
+
+#tableContainer.tf-canvas-on {
+    position: relative;
+    padding: 0;
+    overflow: hidden;
+}
+
+.tf-canvas-viewport {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    /* The dotted ground is what makes panning legible — without it an empty
+       canvas gives the eye nothing to tell movement from stillness. */
+    background-color: var(--t-bg-workspace, #f7f8fa);
+    background-image: radial-gradient(circle, var(--t-border, #d8dbe0) 1px, transparent 1px);
+    background-size: 22px 22px;
+    cursor: default;
+}
+
+.tf-canvas-viewport.tf-space   { cursor: grab; }
+.tf-canvas-viewport.tf-panning { cursor: grabbing; }
+
+.tf-canvas-surface {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+}
+
+/* A card is one table and its header, positioned in canvas space. */
+.tf-canvas-card {
+    position: absolute;
+    background: var(--t-bg-surface, #fff);
+    border: 1px solid var(--t-border, #d8dbe0);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    padding: 6px;
+    width: max-content;
+    max-width: none;
+}
+
+.tf-canvas-card.tf-dragging {
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.18);
+    opacity: 0.94;
+    z-index: 40;
+}
+
+/* The header doubles as the drag handle, so it says so. */
+.tf-canvas-card > .accordion {
+    cursor: grab;
+    user-select: none;
+}
+.tf-canvas-card.tf-dragging > .accordion { cursor: grabbing; }
+
+/* On the canvas a panel is never the accordion's collapsed box. */
+.tf-canvas-card > .panel {
+    display: block;
+    max-height: none;
+    overflow: visible;
+}
+
+/* ── Zoom control (bottom-right of the table view) ───────────────────────── */
+.tf-zoom-bar {
+    position: absolute;
+    right: 14px;
+    /* Clear of the announcement banner that pins to the bottom of the viewport;
+       at 14px the control sat half-under it. */
+    bottom: 52px;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    background: var(--t-bg-surface, #fff);
+    border: 1px solid var(--t-border, #d8dbe0);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    font-size: 12px;
+    user-select: none;
+}
+
+.tf-zoom-bar button {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--t-text, #202020);
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.tf-zoom-bar button:hover { background: var(--t-bg-workspace, #eef0f4); }
+
+.tf-zoom-bar .tf-zoom-level {
+    min-width: 46px;
+    text-align: center;
+    color: var(--t-text-muted, #6b7280);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+}
+
+/* Canvas mode owns its own scrolling (pan), so the wrapper must stop scrolling
+   and the container must fill it — otherwise the viewport collapses to content
+   height and there is nothing to pan within. */
+body.tf-canvas-active .table-wrapper {
+    overflow: hidden;
+    padding: 0;
+    cursor: default;
+}
+
+body.tf-canvas-active #tableContainer {
+    height: 100%;
+    min-height: 320px;
 }

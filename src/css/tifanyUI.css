@@ -2184,10 +2184,21 @@ body.node-editor-active #sheetTabBar {
         display: flex;
     }
 
-    /* Node Editor and Lab Mode don't use the bottom nav -- hide it */
+    /* The full-canvas modes don't use the bottom nav -- hide it. Leaving it up
+       parks the table-mode tab bar on top of whatever the mode put at the
+       bottom of its own panel: the Equation Editor's symbol palette, in that
+       mode's case. */
     body.node-editor-active .mobile-bottom-nav,
-    body.lab-mode-active .mobile-bottom-nav {
+    body.lab-mode-active .mobile-bottom-nav,
+    body.equation-editor-active .mobile-bottom-nav {
         display: none;
+    }
+
+    /* ...and take the 56px back, since nothing is standing in it any more.
+       Without this the palette keeps a strip of dead panel under it that looks
+       like the layout stopped short. */
+    body.equation-editor-active .tifany-app {
+        height: 100dvh;
     }
 
     /* Lab Mode: also hide the center-header (step builder owns the full panel) */

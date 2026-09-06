@@ -135,42 +135,42 @@ function _loadSheetsAsNodes() {
 
         const cleanHtml = window.DOMPurify ? window.DOMPurify.sanitize(html, { ALLOW_DATA_ATTR: true }) : html;
         const $temp  = $('<div>').html(cleanHtml);
-        const $table = $temp.find('table').first();
-
-        if (!$table.length) { idx++; return; }
-
-        const csm     = window.cellStoreManager;
-        const headers = [];
-        const $rows   = $table.find('tr');
-
-        // First row → column headers (ports)
-        $rows.first().find('td, th').each(function () {
-            headers.push({
-                portId:  'port-' + crypto.randomUUID().slice(0, 8),
-                label:   $(this).text().trim() || 'Column',
-                cellIds: []
-            });
+        const $tables = $temp.find('table');
+        $tables.each(function (tableIndex) {
+            const tableId = this.getAttribute('data-tafne-table-id') || ('table-' + crypto.randomUUID().slice(0, 8));
+            this.setAttribute('data-tafne-table-id', tableId);
+            const headers = _headersFromTable($(this));
+            const x = 50 + (idx % COLS) * 340;
+            const y = 50 + Math.floor(idx / COLS) * 320;
+            const label = $tables.length > 1 ? `${sheet.name} · Table ${tableIndex + 1}` : sheet.name;
+            const nodeId = window.nodeGraphManager.addNode(label, x, y, headers);
+            const node = window.NodeGraph.nodes[nodeId];
+            node.sourceSheetId = sheet.id;
+            node.sourceTableId = tableId;
+            node.sourceTableIndex = tableIndex;
+            renderNodeDom(nodeId);
+            idx++;
         });
-
-        // Remaining rows → cell values in CellStore
-        $rows.slice(1).each(function () {
-            $(this).find('td, th').each(function (colIdx) {
-                if (colIdx < headers.length) {
-                    headers[colIdx].cellIds.push(csm.create($(this).text().trim()));
-                }
-            });
-        });
-
-        // Stagger nodes in a 3-column grid
-        const x = 50 + (idx % COLS) * 340;
-        const y = 50 + Math.floor(idx / COLS) * 320;
-
-        const nodeId = window.nodeGraphManager.addNode(sheet.name, x, y, headers);
-        window.NodeGraph.nodes[nodeId].sourceSheetId = sheet.id;
-
-        renderNodeDom(nodeId);
-        idx++;
+        // Persist stable table identities back into the sheet source.
+        if ($tables.length) {
+            sheet.rawHtml = $temp.html();
+            sheet.containerHtml = null;
+        }
     });
+}
+
+function _headersFromTable($table) {
+    const headers = [];
+    const $rows = $table.find('tr');
+    $rows.first().find('td, th').each(function () {
+        headers.push({ portId: 'port-' + crypto.randomUUID().slice(0, 8), label: $(this).text().trim() || 'Column', cellIds: [], direction: 'inout' });
+    });
+    $rows.slice(1).each(function () {
+        $(this).find('td, th').each(function (colIdx) {
+            if (colIdx < headers.length) headers[colIdx].cellIds.push(window.cellStoreManager.create($(this).text().trim()));
+        });
+    });
+    return headers;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -211,13 +211,17 @@ function _nodeVal(h, r, csm) {
 
 function _syncNodesToSheets() {
     const csm = window.cellStoreManager;
-
+    const bySheet = {};
     Object.values(window.NodeGraph.nodes).forEach(node => {
-        if (!node.sourceSheetId) return;
-        const sheet = window.sheets.find(s => s.id === node.sourceSheetId);
+        if (node.sourceSheetId) (bySheet[node.sourceSheetId] ||= []).push(node);
+    });
+    Object.entries(bySheet).forEach(([sheetId, nodes]) => {
+        const sheet = window.sheets.find(s => s.id === sheetId);
         if (!sheet) return;
-
-        let html = '<table class="tablecoil crosshair-table"><thead><tr>';
+        const source = sheet.id === window.activeSheetId ? $('#tableContainer').html() : (sheet.rawHtml || sheet.containerHtml || '');
+        const $host = $('<div>').html(source);
+        nodes.sort((a, b) => (a.sourceTableIndex || 0) - (b.sourceTableIndex || 0)).forEach(node => {
+            let html = `<table class="tablecoil crosshair-table" data-tafne-table-id="${_esc(node.sourceTableId || '')}"><thead><tr>`;
         node.headers.forEach(h => { html += `<th>${_esc(h.label)}</th>`; });
         html += '</tr></thead><tbody>';
 
@@ -230,7 +234,11 @@ function _syncNodesToSheets() {
         }
         html += '</tbody></table>';
 
-        sheet.rawHtml       = html;
+            let $target = node.sourceTableId ? $host.find(`table[data-tafne-table-id="${node.sourceTableId}"]`).first() : $();
+            if (!$target.length) $target = $host.find('table').eq(node.sourceTableIndex || 0);
+            if ($target.length) $target.replaceWith(html); else $host.append(html);
+        });
+        sheet.rawHtml       = $host.html();
         sheet.containerHtml = null; // force re-parse from rawHtml on next activate
     });
 }
@@ -267,8 +275,21 @@ function renderNodeDom(nodeId) {
     const isOperator = window.NodeTypes ? window.NodeTypes.isOperator(nodeType) : false;
 
     // ── Header rows (port row per column) — direction-aware
+    //
+    //  Columns carrying an `outputGroup` are rendered under a group heading, so
+    //  a node with several named outputs reads as several tables rather than
+    //  one long column list. Wiring from any port inside a group carries that
+    //  group's columns (see _readSourcePort in nodeExecutor.js).
     let headerRowsHtml = '';
+    let lastGroup = undefined;
     node.headers.forEach(h => {
+        if (h.outputGroup !== lastGroup) {
+            lastGroup = h.outputGroup;
+            if (h.outputGroup) {
+                headerRowsHtml += `
+            <div class="ne-node-group-heading" title="Output: ${_esc(h.groupLabel || h.outputGroup)}">${_esc(h.groupLabel || h.outputGroup)}</div>`;
+            }
+        }
         const dir = h.direction || (isOperator ? 'in' : 'inout');
         const showIn  = dir === 'in'  || dir === 'inout';
         const showOut = dir === 'out' || dir === 'inout';
@@ -288,15 +309,25 @@ function renderNodeDom(nodeId) {
     });
 
     // ── Data rows (up to MAX_VISIBLE_ROWS, only for table nodes or done operator nodes)
+    //
+    //  With named outputs the headers belong to different tables with different
+    //  row counts, so a single row strip across all of them would interleave
+    //  unrelated data. Preview the FIRST group only; the rest are reachable by
+    //  wiring their ports, and the group headings above name them.
     let dataRowsHtml = '';
-    if (!collapsed && node.headers.length > 0) {
+    const groupNames  = [...new Set(node.headers.map(h => h.outputGroup).filter(Boolean))];
+    const previewCols = groupNames.length
+        ? node.headers.filter(h => h.outputGroup === groupNames[0])
+        : node.headers;
+
+    if (!collapsed && previewCols.length > 0) {
         // rowCount: check h.values (columnar/operator headers) or h.cellIds (source/table headers)
-        const rowCount    = node.headers.reduce((m, h) => Math.max(m, (h.values || h.cellIds || []).length), 0);
+        const rowCount    = previewCols.reduce((m, h) => Math.max(m, (h.values || h.cellIds || []).length), 0);
         const displayRows = Math.min(rowCount, MAX_VISIBLE_ROWS);
 
         for (let r = 0; r < displayRows; r++) {
             dataRowsHtml += '<div class="ne-node-data-row">';
-            node.headers.forEach(h => {
+            previewCols.forEach(h => {
                 let val    = '';
                 let cellId = '';
                 if (h.values) {
@@ -328,25 +359,23 @@ function renderNodeDom(nodeId) {
         ? `<span class="ne-type-badge" style="background:${typeDef.color}" title="${_esc(typeDef.description)}">${typeDef.icon} ${typeDef.label}</span>`
         : '';
 
+    // Both the config button and the placeholder below key off this, so it is
+    // computed once — two copies of the scan drift apart the moment one changes.
+    const hasInputWire = Object.values(window.NodeGraph.wires || {}).some(
+        w => w.targetNodeId === nodeId
+    );
+
     // ── Config button (operator nodes only) — disabled until at least one input wire exists
     let configBtn = '';
     if (isOperator) {
-        const hasInputWire = Object.values(window.NodeGraph.wires || {}).some(
-            w => w.targetNodeId === nodeId
-        );
-        if (hasInputWire) {
-            configBtn = `<button class="ne-node-config-btn" title="Configure node">⚙</button>`;
-        } else {
-            configBtn = `<button class="ne-node-config-btn ne-config-btn-disabled" title="Connect a source table first" disabled>⚙</button>`;
-        }
+        configBtn = hasInputWire
+            ? `<button class="ne-node-config-btn" title="Configure node">⚙</button>`
+            : `<button class="ne-node-config-btn ne-config-btn-disabled" title="Connect a source table first" disabled>⚙</button>`;
     }
 
     // ── Operator placeholder when idle/running and no input wires yet
     let operatorPlaceholder = '';
     if (isOperator && !collapsed && (execState === 'idle' || execState === 'running')) {
-        const hasInputWire = Object.values(window.NodeGraph.wires || {}).some(
-            w => w.targetNodeId === nodeId
-        );
         if (!hasInputWire) {
             operatorPlaceholder = `<div class="ne-operator-placeholder">Wire a table's output port here, then ⚙ configure</div>`;
         } else if (node.headers.filter(h => h.direction === 'out').length === 0) {
@@ -478,45 +507,31 @@ function addCurrentSheetAsNode() {
     const sheet = window.sheets.find(s => s.id === window.activeSheetId);
     if (!sheet) return;
 
-    const already = Object.values(window.NodeGraph.nodes).find(n => n.sourceSheetId === window.activeSheetId);
-    if (already) {
-        $.toast({ heading: 'Node Editor', text: 'Sheet already in node view', icon: 'warning', loader: false, stack: false });
-        return;
-    }
-
-    const csm     = window.cellStoreManager;
     const html    = $('#tableContainer').html();
     const $temp   = $('<div>').html(html);
-    const $table  = $temp.find('table').first();
-
-    if (!$table.length) {
+    const $tables = $temp.find('table');
+    if (!$tables.length) {
         $.toast({ heading: 'Node Editor', text: 'No table in current sheet', icon: 'warning', loader: false, stack: false });
         return;
     }
 
-    const headers = [];
-    const $rows   = $table.find('tr');
-
-    $rows.first().find('td, th').each(function () {
-        headers.push({ portId: 'port-' + crypto.randomUUID().slice(0, 8), label: $(this).text().trim() || 'Column', cellIds: [] });
+    let added = 0;
+    $tables.each(function (tableIndex) {
+        const tableId = this.getAttribute('data-tafne-table-id') || ('table-' + crypto.randomUUID().slice(0, 8));
+        this.setAttribute('data-tafne-table-id', tableId);
+        if (Object.values(window.NodeGraph.nodes).some(n => n.sourceSheetId === window.activeSheetId && (n.sourceTableId === tableId || (!n.sourceTableId && n.sourceTableIndex === tableIndex)))) return;
+        const count = Object.keys(window.NodeGraph.nodes).length;
+        const nodeId = window.nodeGraphManager.addNode(`${sheet.name} · Table ${tableIndex + 1}`, 50 + (count % 3) * 340, 50 + Math.floor(count / 3) * 320, _headersFromTable($(this)));
+        Object.assign(window.NodeGraph.nodes[nodeId], { sourceSheetId: window.activeSheetId, sourceTableId: tableId, sourceTableIndex: tableIndex });
+        renderNodeDom(nodeId);
+        added++;
     });
-    $rows.slice(1).each(function () {
-        $(this).find('td, th').each(function (ci) {
-            if (ci < headers.length) headers[ci].cellIds.push(csm.create($(this).text().trim()));
-        });
-    });
-
-    const count = Object.keys(window.NodeGraph.nodes).length;
-    const x = 50 + (count % 3) * 340;
-    const y = 50 + Math.floor(count / 3) * 320;
-
-    const nodeId = window.nodeGraphManager.addNode(sheet.name, x, y, headers);
-    window.NodeGraph.nodes[nodeId].sourceSheetId = window.activeSheetId;
-    renderNodeDom(nodeId);
+    sheet.rawHtml = $temp.html();
+    sheet.containerHtml = null;
 
     window.nodeCanvasRenderer.markStaticDirty();
     if (typeof window.saveNodeEditorState === 'function') window.saveNodeEditorState();
-    $.toast({ heading: 'Node Editor', text: `"${sheet.name}" added`, icon: 'success', loader: false, stack: false });
+    $.toast({ heading: 'Node Editor', text: added ? `${added} table node${added === 1 ? '' : 's'} added` : 'Every table in this sheet is already present', icon: added ? 'success' : 'info', loader: false, stack: false });
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -589,13 +604,8 @@ window.saveNodeEditorState = saveNodeEditorState;
 // Theme change listener
 // ──────────────────────────────────────────────────────────────────────────────
 
-// Legacy postMessage format (direct host fallback)
-window.addEventListener('message', function (ev) {
-    if (ev.data && ev.data.type === 'cws:theme-change' && window.nodeEditorEnabled) {
-        window.nodeCanvasRenderer.onThemeChange();
-    }
-});
-// New bridge CustomEvent format (from CwsBridge)
+// bridge.js receives the raw `cws:theme-change` postMessage and re-dispatches it
+// as this CustomEvent, so listening here covers both the bridge and direct hosts.
 window.addEventListener('cws-theme-change', function () {
     if (window.nodeEditorEnabled && window.nodeCanvasRenderer) {
         window.nodeCanvasRenderer.onThemeChange();

@@ -11,6 +11,14 @@ function _escHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
+// CSV and TSV describe row values, not merged-cell structure. Normalize a
+// ragged matrix to its widest record so every visual coordinate has a real
+// cell. Missing values become empty strings; they never imply colspan.
+function _padDelimitedRows(rows) {
+    const width = rows.reduce((max, row) => Math.max(max, row.length), 0);
+    return rows.map(row => row.concat(Array(Math.max(0, width - row.length)).fill('')));
+}
+
 function parseInput() {
     const inputType = $('#inputType').val();
     const inputData = (window.tifanyMonacoInput
@@ -260,7 +268,7 @@ function _parseRfc4180(csv) {
 }
 
 function parseCsvInput(csv) {
-    const records = _parseRfc4180(csv);
+    const records = _padDelimitedRows(_parseRfc4180(csv));
     if (records.length === 0) return '';
 
     let tableHtml = '<table class="tablecoil crosshair-table">';
@@ -279,11 +287,13 @@ function parseTextInput(text) {
     const lines = text.split('\n').filter(line => line.trim());
     if (lines.length === 0) return '';
 
+    // Split on each delimiter rather than /\t+/: adjacent tabs represent an
+    // intentional empty cell and must not collapse into one separator.
+    const records = _padDelimitedRows(lines.map(line => line.replace(/\r$/, '').split('\t').map(cell => cell.trim())));
+
     let tableHtml = '<table class="tablecoil crosshair-table">';
 
-    lines.forEach((line, index) => {
-        const cells = line.split(/\t+/).map(cell => cell.trim());
-
+    records.forEach((cells, index) => {
         if (cells.length > 0) {
             tableHtml += '<tr id="test">';
             cells.forEach(cell => {

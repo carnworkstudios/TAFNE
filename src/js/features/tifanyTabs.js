@@ -58,13 +58,18 @@ function headerAccordion() {
  */
 function pruneHiddenSelection(table) {
     const kept = (window.selectedCells || []).filter(window.isCellVisible);
-    if (kept.length === (window.selectedCells || []).length) return;
+    if (kept.length === (window.selectedCells || []).length) {
+        if (typeof window.scheduleTableGeometrySync === 'function') window.scheduleTableGeometrySync(table);
+        else if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
+        return;
+    }
 
     $(table).find('.selected-cell').not(kept).removeClass('selected-cell');
     window.selectedCells = kept;
     if (!window.isCellVisible(window.selectionAnchorCell)) window.selectionAnchorCell = kept[0] || null;
     if (!window.isCellVisible(window.selectionHeadCell))   window.selectionHeadCell   = kept[kept.length - 1] || null;
-    if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
+    if (typeof window.scheduleTableGeometrySync === 'function') window.scheduleTableGeometrySync(table);
+    else if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
     if (typeof window.populateStylesPanel === 'function') window.populateStylesPanel();
 }
 window.pruneHiddenSelection = pruneHiddenSelection;
@@ -96,6 +101,7 @@ function initSpSelectors() {
             requestAnimationFrame(() => {
                 pruneHiddenSelection(tbl);
                 if (typeof window.renderTableRulers === 'function') window.renderTableRulers(tbl);
+                if (typeof window.scheduleTableGeometrySync === 'function') window.scheduleTableGeometrySync(tbl);
             });
         }
     });

@@ -3,7 +3,132 @@
 // ====================================== ADD & DELETE FUNCTIONALITY ================================================
 
 // Global clipboard for copy/paste
-window.tafneClipboard = [];
+window.tafneClipboard = null;
+
+// Capture a selection as a visual matrix, not as a DOM-order list.  A cell is
+// stored once at its origin together with its relative position and span, so a
+// 2x3 range remains a 2x3 range after table reparses and repeated pastes.
+function _serializeSelectedMatrix() {
+    const mapper = new window.VisualGridMapper(window.currentTable);
+    const positions = window.selectedCells.map(cell => ({ cell, pos: mapper.getVisualPosition(cell) })).filter(x => x.pos);
+    if (!positions.length) return null;
+    const minRow = Math.min(...positions.map(x => x.pos.startRow));
+    const minCol = Math.min(...positions.map(x => x.pos.startCol));
+    const maxRow = Math.max(...positions.map(x => x.pos.startRow + x.pos.rowspan - 1));
+    const maxCol = Math.max(...positions.map(x => x.pos.startCol + x.pos.colspan - 1));
+    const selected = new Set(positions.map(x => x.cell));
+
+    // Spreadsheet copy is rectangular. Expand a lasso/row selection to its
+    // bounding rectangle so the clipboard has deterministic dimensions.
+    const cells = [];
+    const seen = new Set();
+    for (let r = minRow; r <= maxRow; r++) {
+        for (let c = minCol; c <= maxCol; c++) {
+            const slot = mapper.grid[r] && mapper.grid[r][c];
+            if (!slot || seen.has(slot.element)) continue;
+            seen.add(slot.element);
+            const pos = mapper.getVisualPosition(slot.element);
+            cells.push({
+                row: pos.startRow - minRow,
+                col: pos.startCol - minCol,
+                rowspan: pos.rowspan,
+                colspan: pos.colspan,
+                html: slot.element.outerHTML,
+                text: $(slot.element).text()
+            });
+        }
+    }
+    return { version: 2, rows: maxRow - minRow + 1, cols: maxCol - minCol + 1, cells };
+}
+
+function _matrixAsTsv(matrix) {
+    const values = Array.from({ length: matrix.rows }, () => Array(matrix.cols).fill(''));
+    matrix.cells.forEach(cell => { values[cell.row][cell.col] = cell.text; });
+    return values.map(row => row.join('\t')).join('\n');
+}
+
+// A paste is also a request for a destination range.  New sheets begin as a
+// small table, but a spreadsheet does not make the user pre-size it before
+// pasting a copied matrix.  Grow only plain grids here: expanding through a
+// merge is ambiguous and remains an explicit unmerge-first operation below.
+function _growTableForMatrix(anchor, matrix) {
+    let mapper = new window.VisualGridMapper(window.currentTable);
+    const pos = mapper.getVisualPosition(anchor);
+    if (!pos) return null;
+
+    const neededRows = pos.startRow + matrix.rows;
+    const neededCols = pos.startCol + matrix.cols;
+    if (neededRows <= mapper.maxRows && neededCols <= mapper.maxCols) return mapper;
+
+    const isPlain = mapper.grid.every(row => row.every(slot => {
+        const cellPos = slot && mapper.getVisualPosition(slot.element);
+        return slot && slot.isOrigin && cellPos && cellPos.rowspan === 1 && cellPos.colspan === 1;
+    }));
+    if (!isPlain) {
+        $.toast({ heading: 'Paste', text: 'Unmerge the destination table before extending it for this matrix.', icon: 'warning', loader: false, stack: false });
+        return null;
+    }
+
+    const rows = Array.from(window.currentTable.querySelectorAll('tr'));
+    const extraCols = Math.max(0, neededCols - mapper.maxCols);
+    rows.forEach(function (row) {
+        const tag = row.querySelector('th') && !row.querySelector('td') ? 'th' : 'td';
+        for (let c = 0; c < extraCols; c++) row.appendChild(document.createElement(tag));
+    });
+    for (let r = mapper.maxRows; r < neededRows; r++) {
+        const row = document.createElement('tr');
+        for (let c = 0; c < Math.max(mapper.maxCols, neededCols); c++) row.appendChild(document.createElement('td'));
+        window.currentTable.appendChild(row);
+    }
+    return new window.VisualGridMapper(window.currentTable);
+}
+
+function _pasteMatrixAt(target) {
+    const matrix = window.tafneClipboard;
+    if (!matrix || matrix.version !== 2) return false;
+    let mapper = new window.VisualGridMapper(window.currentTable);
+    let anchor = mapper.getVisualPosition(target);
+    if (!anchor) return false;
+    if (anchor.startRow + matrix.rows > mapper.maxRows || anchor.startCol + matrix.cols > mapper.maxCols) {
+        mapper = _growTableForMatrix(target, matrix);
+        if (!mapper) return false;
+        anchor = mapper.getVisualPosition(target);
+    }
+
+    // Replacing a partial merged cell would corrupt table geometry. Require a
+    // plain destination rectangle; copied merged cells are recreated exactly.
+    const targets = [];
+    for (let r = 0; r < matrix.rows; r++) {
+        for (let c = 0; c < matrix.cols; c++) {
+            const slot = mapper.grid[anchor.startRow + r] && mapper.grid[anchor.startRow + r][anchor.startCol + c];
+            const pos = slot && mapper.getVisualPosition(slot.element);
+            if (!slot || !slot.isOrigin || !pos || pos.rowspan !== 1 || pos.colspan !== 1) {
+                $.toast({ heading: 'Paste', text: 'Unmerge the destination range before pasting a matrix.', icon: 'warning', loader: false, stack: false });
+                return false;
+            }
+            targets.push(slot.element);
+        }
+    }
+
+    window.saveCurrentState();
+    const consumed = new Set();
+    matrix.cells.forEach(cell => {
+        const index = cell.row * matrix.cols + cell.col;
+        const $clone = $(cell.html).first();
+        $(targets[index]).replaceWith($clone);
+        for (let rr = 0; rr < cell.rowspan; rr++) {
+            for (let cc = 0; cc < cell.colspan; cc++) {
+                if (rr || cc) consumed.add((cell.row + rr) * matrix.cols + cell.col + cc);
+            }
+        }
+    });
+    // Remove cells covered by a recreated rowspan/colspan, from the end so DOM
+    // indices do not shift under earlier removals.
+    [...consumed].sort((a, b) => b - a).forEach(i => $(targets[i]).remove());
+    window.saveCurrentState();
+    window.setupTableInteraction();
+    return true;
+}
 
 function duplicateElement() {
     if (window.selectedCells.length === 0) {
@@ -63,12 +188,14 @@ function copySelected() {
         $.toast({ heading: 'Info', text: 'Please select a cell.', icon: 'warning', loader: false, stack: false });
         return;
     }
-    // Store the outer HTML string of each selected cell so the clipboard
-    // survives table re-parses, undos, and multiple paste operations.
-    window.tafneClipboard = window.selectedCells.map(cell => cell.outerHTML);
+    window.tafneClipboard = _serializeSelectedMatrix();
+    if (!window.tafneClipboard) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(_matrixAsTsv(window.tafneClipboard)).catch(function () {});
+    }
     $.toast({
         heading: 'Copied',
-        text: window.selectedCells.length + ' cell(s) copied',
+        text: window.tafneClipboard.rows + ' × ' + window.tafneClipboard.cols + ' matrix copied',
         icon: 'info',
         loader: false,
         stack: false
@@ -76,7 +203,12 @@ function copySelected() {
 }
 
 function pasteBefore() {
-    if (window.selectedCells.length === 0 || window.tafneClipboard.length === 0) return;
+    if (window.selectedCells.length === 0 || !window.tafneClipboard) return;
+
+    if (window.tafneClipboard.version === 2) {
+        if (_pasteMatrixAt(window.selectedCells[0])) $.toast({ heading: 'Pasted', text: 'Matrix pasted at the active cell', icon: 'success', loader: false, stack: false });
+        return;
+    }
 
     // Reverse-iterate the clipboard when inserting before so the first copied
     // cell ends up directly before the target (each insert shifts subsequent ones right).
@@ -98,7 +230,12 @@ function pasteBefore() {
 }
 
 function pasteAfter() {
-    if (window.selectedCells.length === 0 || window.tafneClipboard.length === 0) return;
+    if (window.selectedCells.length === 0 || !window.tafneClipboard) return;
+
+    if (window.tafneClipboard.version === 2) {
+        if (_pasteMatrixAt(window.selectedCells[0])) $.toast({ heading: 'Pasted', text: 'Matrix pasted at the active cell', icon: 'success', loader: false, stack: false });
+        return;
+    }
 
     // Forward-iterate: insert each clipboard item after the previous insertion point
     // so items appear in the same order as they were copied.
@@ -184,9 +321,11 @@ function deleteCell() {
         return;
     }
 
-    // Remove each selected cell
+    // A spreadsheet delete clears values; structural deletion belongs to the
+    // explicit row and column commands. Keeping the td/th also preserves spans,
+    // sizing, styles, ruler coordinates, and the rectangular grid.
     window.selectedCells.forEach(cell => {
-        $(cell).remove();
+        $(cell).empty();
     });
 
     // Clear selection
@@ -195,7 +334,7 @@ function deleteCell() {
     window.saveCurrentState();
     $.toast({
         heading: 'Success',
-        text: 'Cell Deleted',
+        text: 'Cell content cleared',
         icon: 'success',
         loader: false,
         stack: false

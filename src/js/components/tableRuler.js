@@ -9,8 +9,29 @@ window.tableRuler = (function () {
 
     const DRAG_THRESHOLD_PX = 4; // pixels of movement before a mousedown becomes a reorder drag
 
-    // Duplicate-mode flag: when true the insert pill duplicates the row/col instead of inserting blank
-    let _duplicateMode = false;
+    // Geometry inside the table canvas lives in layout coordinates and is then
+    // transformed as one surface. Rulers must therefore be sized in layout
+    // pixels, while the body-level selection overlay is positioned from
+    // viewport rectangles. Keep those two updates in one scheduled pass so a
+    // pane transition, SP switch, or canvas transform cannot update only half
+    // of the chrome.
+    function scheduleGeometrySync(table) {
+        table = table || window.currentTable;
+        if (!table || !document.documentElement.contains(table)) return;
+        // Coalesce bursts to one measurement per paint, but never keep pushing
+        // the frame away. Canvas pan/zoom emits continuously; cancelling on
+        // every pointermove would make the overlay freeze until the gesture
+        // ended.
+        if (table._tafneGeometryFrame) return;
+        table._tafneGeometryFrame = requestAnimationFrame(() => {
+            delete table._tafneGeometryFrame;
+            const wrap = $(table).closest('.tafne-ruler-wrap')[0];
+            if (wrap && table.offsetParent !== null) _syncRulerSegments(wrap, table);
+            if (table === window.currentTable && typeof window.updateSelectionHandles === 'function') {
+                window.updateSelectionHandles();
+            }
+        });
+    }
 
     // ── Column labels ─────────────────────────────────────────────────────────
     // A, B, … Z, AA, AB … — the spreadsheet convention. Numbers on the column
@@ -40,7 +61,10 @@ window.tableRuler = (function () {
         $rowSegs.each(function (i) {
             const row = rows[i];
             if (!row) return;
-            const h = row.getBoundingClientRect().height;
+            // offsetHeight is the untransformed layout size. Using the viewport
+            // rect here double-applies TableCanvas zoom because the ruler is a
+            // sibling inside that same transformed surface.
+            const h = row.offsetHeight;
             if (h > 0) {
                 $(this).css({ 'min-height': h + 'px', 'max-height': h + 'px', height: h + 'px', display: '' });
             } else {
@@ -54,7 +78,7 @@ window.tableRuler = (function () {
         const seen       = new Array(mapper.maxCols).fill(false);
         const hasVisible = new Array(mapper.maxCols).fill(false);
         mapper.cellMap.forEach((info, cell) => {
-            const w = cell.getBoundingClientRect().width;
+            const w = cell.offsetWidth;
             if (w > 0) {
                 for (let c = info.startCol; c < info.startCol + info.colspan; c++) hasVisible[c] = true;
             }
@@ -492,19 +516,168 @@ window.tableRuler = (function () {
         });
     }
 
-    // ── Pill label for current mode ───────────────────────────────────────────
-    function _pillLabel() { return _duplicateMode ? '⎘' : '+'; }
-    function _pillRowTitle() { return _duplicateMode ? 'Duplicate row below' : 'Insert row after'; }
-    function _pillColTitle() { return _duplicateMode ? 'Duplicate column after' : 'Insert column after'; }
-    function _cornerTitle()  { return _duplicateMode ? 'Mode: Duplicate — click to switch to Insert' : 'Mode: Insert — click to switch to Duplicate'; }
+    // ── Select every cell in the table (the corner gesture) ──────────────────
+    function _selectWholeTable(table) {
+        const m = new window.VisualGridMapper(table);
+        const cells = [];
+        for (let r = 0; r < m.maxRows; r++) {
+            for (let c = 0; c < m.maxCols; c++) {
+                const gc = m.grid[r] && m.grid[r][c];
+                if (!gc || !gc.isOrigin) continue;
+                if ($(gc.element).hasClass('drag-handle')) continue;
+                if (typeof window.isCellVisible === 'function' && !window.isCellVisible(gc.element)) continue;
+                if (cells.indexOf(gc.element) === -1) cells.push(gc.element);
+            }
+        }
+        _applyRulerSelection(table, cells, 'cell');
+    }
 
-    // Update every pill label + corner tooltip across all ruler wraps
-    function _syncModeUI() {
-        const label = _pillLabel();
-        $('.tafne-row-ruler .ruler-insert-pill').text(label).attr('title', _pillRowTitle());
-        $('.tafne-col-ruler .ruler-insert-pill').text(label).attr('title', _pillColTitle());
-        $('.tafne-corner').attr('title', _cornerTitle());
-        $('.tafne-ruler-wrap').toggleClass('ruler-dup-mode', _duplicateMode);
+    // ── Header caret menu (Numbers-style row/column actions) ──────────────────
+    //
+    // Replaces the two hidden affordances this used to rely on: a `+` pill whose
+    // meaning changed depending on a global insert/duplicate mode nobody could
+    // see, and a right-click that only worked if you knew to try it. A caret
+    // appears on segment hover, and every action the pill and the mode toggle
+    // used to encode is now a named item in one list.
+    //
+    // The ops live in tableOperations.js, which loads AFTER this file — so they
+    // are resolved at click time, never at wire time.
+    const ROW_MENU = [
+        { label: 'Insert Row Above',  fn: 'addRowBefore' },
+        { label: 'Insert Row Below',  fn: 'addRow' },
+        { label: 'Duplicate Row',     fn: '_dupRow' },
+        { sep: true },
+        { label: 'Cut',               fn: '_cut' },
+        { label: 'Copy',              fn: '_copy' },
+        { label: 'Paste',             fn: '_paste' },
+        { sep: true },
+        { label: 'Delete Row',        fn: 'deleteRows', danger: true }
+    ];
+    const COL_MENU = [
+        { label: 'Insert Column Before', fn: 'addColumnBefore' },
+        { label: 'Insert Column After',  fn: 'addColumn' },
+        { label: 'Duplicate Column',     fn: '_dupCol' },
+        { sep: true },
+        { label: 'Cut',                  fn: '_cut' },
+        { label: 'Copy',                 fn: '_copy' },
+        { label: 'Paste',                fn: '_paste' },
+        { sep: true },
+        { label: 'Fit Width to Content', fn: '_fitWidth' },
+        { sep: true },
+        { label: 'Delete Column',        fn: 'deleteColumns', danger: true }
+    ];
+
+    function _closeHeaderMenu() {
+        $('#tafneHeaderMenu').remove();
+        $('.ruler-menu-caret.is-open').removeClass('is-open');
+        $(document).off('.tafnehdrmenu');
+    }
+
+    // Duplicate the selected row(s) / column(s) directly from the live selection,
+    // so it does not depend on the #elementType dropdown the old mode toggle used.
+    function _dupRow(table) {
+        const rows = new Set();
+        (window.selectedCells || []).forEach(c => rows.add($(c).parent()[0]));
+        if (!rows.size) return;
+        if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+        if (table._tafneStructObs) table._tafneStructObs.disconnect();
+        rows.forEach(r => $(r).after($(r).clone(false)));
+        renderTableRulers(table);
+        if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+    }
+
+    function _dupCol(table) {
+        const m = new window.VisualGridMapper(table);
+        const cols = new Set();
+        (window.selectedCells || []).forEach(c => {
+            const p = m.getVisualPosition(c);
+            if (p) cols.add(p.startCol);
+        });
+        if (!cols.size) return;
+        if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+        if (table._tafneStructObs) table._tafneStructObs.disconnect();
+        // Descending, so inserting into one column never shifts a column still queued.
+        Array.from(cols).sort((a, b) => b - a).forEach(ci => {
+            for (let r = 0; r < m.maxRows; r++) {
+                const gc = m.grid[r] && m.grid[r][ci];
+                if (gc && gc.isOrigin) $(gc.element).after($(gc.element).clone(false));
+            }
+        });
+        renderTableRulers(table);
+        if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+    }
+
+    function _fitWidth(table, axis, idx) {
+        if (axis !== 'col') return;
+        _setColWidth(table, idx, _autoFitWidth(table, idx));
+        _syncRulerSegments($(table).closest('.tafne-ruler-wrap')[0], table);
+    }
+
+    // Clipboard items reuse the existing matrix clipboard in tableOperations.js.
+    function _copy() { if (typeof window.copySelected === 'function') window.copySelected(); }
+    function _cut(table) {
+        if (typeof window.copySelected === 'function') window.copySelected();
+        if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+        (window.selectedCells || []).forEach(c => $(c).empty());
+        if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
+    }
+    // pasteAfter already routes a v2 matrix to the active cell, which is the
+    // spreadsheet behaviour; the legacy branch is its row/col fallback.
+    function _paste() {
+        if (typeof window.pasteAfter === 'function') window.pasteAfter();
+    }
+
+    const _LOCAL_OPS = { _dupRow, _dupCol, _fitWidth, _copy, _cut, _paste };
+
+    // Open the caret menu for one row/column. Selecting the segment first is what
+    // makes the shared ops (which all read window.selectedCells) act on it.
+    function _openHeaderMenu($wrap, table, axis, idx, anchorEl) {
+        _closeHeaderMenu();
+        window.currentTable = table;
+        if (axis === 'row') _handleRulerRowClick($wrap, table, idx, { shiftKey: false });
+        else                _handleRulerColClick($wrap, table, idx, { shiftKey: false });
+
+        const items = axis === 'row' ? ROW_MENU : COL_MENU;
+        const $menu = $('<div id="tafneHeaderMenu" class="tafne-hdr-menu"></div>');
+        items.forEach(it => {
+            if (it.sep) { $menu.append('<div class="tafne-hdr-menu-sep"></div>'); return; }
+            $('<button type="button" class="tafne-hdr-menu-item"></button>')
+                .text(it.label)
+                .toggleClass('is-danger', !!it.danger)
+                .on('click', function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    _closeHeaderMenu();
+                    const local = _LOCAL_OPS[it.fn];
+                    if (local) local(table, axis, idx);
+                    else if (typeof window[it.fn] === 'function') window[it.fn]();
+                    if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
+                })
+                .appendTo($menu);
+        });
+
+        $('body').append($menu);
+        $(anchorEl).addClass('is-open');
+
+        // Anchor below the caret, flipped back inside the viewport when it would overflow.
+        const r = anchorEl.getBoundingClientRect();
+        const mw = $menu.outerWidth();
+        const mh = $menu.outerHeight();
+        let left = r.left;
+        let top  = r.bottom + 2;
+        if (left + mw + 8 > window.innerWidth)  left = Math.max(8, window.innerWidth - mw - 8);
+        if (top + mh + 8 > window.innerHeight)  top  = Math.max(8, r.top - mh - 2);
+        $menu.css({ left: left + 'px', top: top + 'px' });
+
+        // Defer so the mousedown that opened the menu does not immediately close it.
+        setTimeout(() => {
+            $(document).on('mousedown.tafnehdrmenu', function (ev) {
+                if (!$(ev.target).closest('#tafneHeaderMenu').length) _closeHeaderMenu();
+            });
+            $(document).on('keydown.tafnehdrmenu', function (ev) {
+                if (ev.key === 'Escape') _closeHeaderMenu();
+            });
+        }, 0);
     }
 
     // ── Show the cell context menu at a given viewport position ──────────────
@@ -554,20 +727,18 @@ window.tableRuler = (function () {
         const rows  = Array.from(table.rows).filter(r => !r.classList.contains('tifany-drag-row') && !r.classList.contains('drop-indicator-row'));
         const nRows = rows.length;
 
-        const pillLabel = _pillLabel();
-
         // Build segments without fixed sizes — _syncRulerSegments sets them after DOM insertion
         // Each segment carries a grip on its trailing border: drag to size the
         // column/row, double-click a column grip to fit it to its content.
         const colSegs = Array.from({ length: nCols }, (_, i) =>
-            `<div class="ruler-seg" data-col="${i}" title="Column ${colLabel(i)}">${colLabel(i)}<span class="ruler-insert-pill" data-col="${i}" title="${_pillColTitle()}">${pillLabel}</span><span class="ruler-grip ruler-grip-col" title="Drag to resize · double-click to fit"></span></div>`
+            `<div class="ruler-seg" data-col="${i}" title="Column ${colLabel(i)}">${colLabel(i)}<span class="ruler-menu-caret" data-col="${i}" title="Column actions">\u25BE</span><span class="ruler-grip ruler-grip-col" title="Drag to resize · double-click to fit"></span></div>`
         ).join('');
 
         // A row inside <thead> is frozen by the stylesheet, so its segment is
         // frozen too — see .ruler-seg-frozen.
         const rowSegs = Array.from({ length: nRows }, (_, i) => {
             const frozen = rows[i] && rows[i].parentNode && rows[i].parentNode.tagName === 'THEAD' ? ' ruler-seg-frozen' : '';
-            return `<div class="ruler-seg${frozen}" data-row="${i}" title="Row ${i + 1}">${i + 1}<span class="ruler-insert-pill" data-row="${i}" title="${_pillRowTitle()}">${pillLabel}</span><span class="ruler-grip ruler-grip-row" title="Drag to resize"></span></div>`;
+            return `<div class="ruler-seg${frozen}" data-row="${i}" title="Row ${i + 1}">${i + 1}<span class="ruler-menu-caret" data-row="${i}" title="Row actions">\u25BE</span><span class="ruler-grip ruler-grip-row" title="Drag to resize"></span></div>`;
         }).join('');
 
         // Assemble wrapper:
@@ -576,7 +747,7 @@ window.tableRuler = (function () {
         const $wrap = $(`
             <div class="tafne-ruler-wrap">
                 <div class="tafne-ruler-header">
-                    <div class="tafne-corner" title="${_cornerTitle()}"></div>
+                    <div class="tafne-corner" title="Click to select the whole table · drag to move it · double-click to reset column widths"></div>
                     <div class="tafne-col-ruler-vp">
                         <div class="tafne-col-ruler">${colSegs}</div>
                     </div>
@@ -595,7 +766,7 @@ window.tableRuler = (function () {
         $wrap.find('.tafne-table-vp').append($table);
 
         // Sync segment sizes after the browser has laid out the new DOM
-        requestAnimationFrame(() => _syncRulerSegments($wrap[0], table));
+        scheduleGeometrySync(table);
 
         _wireResize($wrap, table);
 
@@ -611,73 +782,43 @@ window.tableRuler = (function () {
             rowRulerVp.scrollTop  = this.scrollTop;
         }, { passive: true });
 
-        // Apply current dup-mode state
-        $wrap.toggleClass('ruler-dup-mode', _duplicateMode);
-
-        // ── Corner: left-click toggles insert/duplicate mode ─────────────────
+        // ── Corner: click selects the whole table; drag moves the block ──────
+        // It used to toggle a hidden insert/duplicate mode that silently changed
+        // what every + pill did. Selecting the table is what the same corner does
+        // in a spreadsheet, and duplicate is now a named item in the caret menu.
         const $corner = $wrap.find('.tafne-corner');
-        $corner.on('click.ruler', function (e) {
-            e.stopPropagation();
-            _duplicateMode = !_duplicateMode;
-            _syncModeUI();
-        });
-
-        // ── Stop pill mousedown from bubbling into the seg drag/select handler ──
-        $wrap.on('mousedown.ruler', '.ruler-insert-pill', function (e) {
-            e.stopPropagation();
-        });
-
-        // ── Row pill: insert or duplicate row after index ─────────────────────
-        $wrap.find('.tafne-row-ruler').on('click.ruler', '.ruler-insert-pill', function (e) {
-            e.stopPropagation();
+        $corner.on('mousedown.ruler', function (e) {
+            if (e.button !== 0) return;
             e.preventDefault();
-            const idx = parseInt($(this).attr('data-row'), 10);
-            const $rows = $(table).find('tr').not('.tifany-drag-row').not('.drop-indicator-row');
-            const $target = $rows.eq(idx);
-            if (!$target.length) return;
-            if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
-            // Pause the MutationObserver so the insertion doesn't race with renderTableRulers
-            if (table._tafneStructObs) table._tafneStructObs.disconnect();
-            if (_duplicateMode) {
-                $target.after($target.clone(false));
-            } else {
-                const colCount = new window.VisualGridMapper(table).maxCols;
-                let newRow = '<tr>';
-                for (let i = 0; i < colCount; i++) newRow += '<td></td>';
-                newRow += '</tr>';
-                $target.after(newRow);
+            e.stopPropagation();
+            window.currentTable = table;
+            _selectWholeTable(table);
+            if (typeof window.updateSelectionHandles === 'function') window.updateSelectionHandles();
+            // A press that turns into a drag hands off to the block-move gesture
+            // already implemented in cellHandles.js.
+            const sx = e.clientX, sy = e.clientY;
+            function onMove(mv) {
+                if (Math.abs(mv.clientX - sx) <= DRAG_THRESHOLD_PX &&
+                    Math.abs(mv.clientY - sy) <= DRAG_THRESHOLD_PX) return;
+                $(document).off('.rulercorner');
+                if (typeof window.beginSelectionMove === 'function') window.beginSelectionMove(mv);
             }
-            renderTableRulers(table);
+            $(document).on('mousemove.rulercorner', onMove)
+                       .one('mouseup.rulercorner', () => $(document).off('.rulercorner'));
         });
 
-        // ── Col pill: insert or duplicate column after index ──────────────────
-        $wrap.find('.tafne-col-ruler').on('click.ruler', '.ruler-insert-pill', function (e) {
-            e.stopPropagation();
+        // ── Caret: open the row/column action menu ───────────────────────────
+        $wrap.on('mousedown.ruler', '.ruler-menu-caret', function (e) {
             e.preventDefault();
-            const colIdx = parseInt($(this).attr('data-col'), 10);
-            const mapper = new window.VisualGridMapper(table);
-            if (typeof window.saveCurrentState === 'function') window.saveCurrentState();
-            // Pause the MutationObserver so the insertion doesn't race with renderTableRulers
-            if (table._tafneStructObs) table._tafneStructObs.disconnect();
-            if (_duplicateMode) {
-                for (let r = 0; r < mapper.maxRows; r++) {
-                    const rowGrid = mapper.grid[r];
-                    if (!rowGrid) continue;
-                    const gc = rowGrid[colIdx];
-                    if (!gc || !gc.isOrigin) continue;
-                    $(gc.element).after($(gc.element).clone(false));
-                }
-            } else {
-                for (let r = 0; r < mapper.maxRows; r++) {
-                    const rowGrid = mapper.grid[r];
-                    if (!rowGrid) continue;
-                    const gc = rowGrid[colIdx];
-                    if (!gc || !gc.isOrigin) continue;
-                    const tag = gc.element.tagName.toLowerCase();
-                    $(gc.element).after(`<${tag}></${tag}>`);
-                }
-            }
-            renderTableRulers(table);
+            e.stopPropagation();
+        });
+        $wrap.on('click.ruler', '.ruler-menu-caret', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const rowAttr = $(this).attr('data-row');
+            const axis = rowAttr != null ? 'row' : 'col';
+            const idx = parseInt(axis === 'row' ? rowAttr : $(this).attr('data-col'), 10);
+            _openHeaderMenu($wrap, table, axis, idx, this);
         });
 
         // ── Row ruler: right-click → select row + open cell context menu ─────
@@ -819,6 +960,7 @@ window.tableRuler = (function () {
                 const segCols  = $w.find('.tafne-col-ruler .ruler-seg').length;
                 if (liveRows === segRows && mapper2.maxCols === segCols) {
                     _syncRulerSegments($w[0], table);
+                    scheduleGeometrySync(table);
                 } else {
                     table._tafneRulerRebuilding = true;
                     renderTableRulers(table);
@@ -918,10 +1060,11 @@ window.tableRuler = (function () {
         }
     }
 
-    return { renderTableRulers, highlightRuler, destroyRulers, releaseSizing, colLabel };
+    return { renderTableRulers, highlightRuler, destroyRulers, releaseSizing, colLabel, scheduleGeometrySync };
 })();
 
 window.renderTableRulers = window.tableRuler.renderTableRulers;
+window.scheduleTableGeometrySync = window.tableRuler.scheduleGeometrySync;
 window.highlightRuler    = window.tableRuler.highlightRuler;
 window.destroyRulers     = window.tableRuler.destroyRulers;
 window.releaseTableSizing = window.tableRuler.releaseSizing;

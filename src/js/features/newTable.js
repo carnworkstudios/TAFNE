@@ -57,12 +57,18 @@
         // visible, so open its panel — otherwise the card renders with no table inside.
         $(newTable).closest('.panel').show();
 
+        // On the canvas a new table has to be wrapped and placed before it is
+        // measured, or the ruler sizes a card that is still in document flow.
+        if (window.TableCanvas && window.TableCanvas.isEnabled()) window.TableCanvas.refresh();
+
         if (typeof window.setupTableInteraction === 'function') window.setupTableInteraction();
         if (typeof window.renderTableRulers === 'function') {
             requestAnimationFrame(() => window.renderTableRulers(newTable));
         }
 
-        newTable.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (!(window.TableCanvas && window.TableCanvas.isEnabled())) {
+            newTable.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
         $.toast({ heading: 'New table', text: `${rows} × ${cols} table added`, icon: 'success', loader: false, stack: false });
     }
     window.createNewTable = createNewTable;

@@ -89,6 +89,40 @@ window.NodeTypes = {
                 { label: 'Input Table', portId: 'api-input', direction: 'in', cellIds: [] }
             ]
         },
+        condition: {
+            label:       'Condition',
+            color:       '#7c3aed',
+            cssVar:      '--ne-type-condition',
+            icon:        '⑂',
+            description: 'Route rows through If/Else branches',
+            // PRO. The engine is real; placement stays gated until Pro ships.
+            pro:         'node-condition',
+            defaultConfig: {
+                column:   '',        // portId of the column to test
+                operator: 'eq',      // same operator vocabulary as filter
+                value:    ''
+            },
+            defaultPorts: 'in',
+            defaultHeaders: [
+                { label: 'Input Table', portId: 'condition-input', direction: 'in', cellIds: [] }
+            ]
+        },
+        diff: {
+            label:       'Diff',
+            color:       '#d946ef',
+            cssVar:      '--ne-type-diff',
+            icon:        '≠',
+            description: 'Compare two versions of a table into added / removed / modified',
+            defaultConfig: {
+                keyColumn: ''        // portId of the identity column in the BEFORE input
+            },
+            defaultPorts: 'in',
+            // Two named inputs, resolved by _readNamedInput (not the flat input map)
+            defaultHeaders: [
+                { label: 'Before', portId: 'diff-in-before', direction: 'in', cellIds: [] },
+                { label: 'After',  portId: 'diff-in-after',  direction: 'in', cellIds: [] }
+            ]
+        },
         join: {
             label:       'Join',
             color:       '#0ea5e9',

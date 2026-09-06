@@ -51,7 +51,6 @@ window.nodeExecutor = (function () {
     //   can reference source columns directly.
 
     function _buildInputMap(nodeId) {
-        const csm      = window.cellStoreManager;
         const inputMap = {};
         const seen     = new Set();
 
@@ -60,30 +59,86 @@ window.nodeExecutor = (function () {
             if (seen.has(w.sourceNodeId)) return;
             seen.add(w.sourceNodeId);
 
-            const srcNode = window.NodeGraph.nodes[w.sourceNodeId];
-            if (!srcNode) return;
-
-            srcNode.headers
-                .filter(h => h.direction !== 'in')
-                .forEach(h => {
-                    // Columnar path: operator output stored as h.values (no CellStore lookup)
-                    // CellStore path: source/table node data stored via h.cellIds
-                    const values = h.values
-                        ? h.values
-                        : (h.cellIds || []).map(id => {
-                            const cell = csm.get(id);
-                            return cell ? cell.value : '';
-                        });
-                    inputMap[h.portId] = { label: h.label, values, sourceNodeId: w.sourceNodeId };
-                });
+            _readSourcePort(w.sourceNodeId, w.sourcePortId).forEach(col => {
+                inputMap[col.portId] = {
+                    label:        col.label,
+                    values:       col.values,
+                    sourceNodeId: w.sourceNodeId
+                };
+            });
         });
 
         return inputMap;
     }
 
+    // ── Port-aware source read ────────────────────────────────────────────────
+    //
+    //   Returns the columns a wire carries out of `sourceNodeId`.
+    //
+    //   A node may declare several named OUTPUT GROUPS (see `outputGroup` on a
+    //   header). A wire leaving a grouped output carries only that group's
+    //   columns — which is what makes one node able to emit `added`, `removed`
+    //   and `modified` down three different wires. `sourcePortId` is the port
+    //   the wire physically leaves from; its header's `outputGroup` selects the
+    //   group. A node with no groups declared behaves exactly as before: every
+    //   non-`in` column travels together, so existing graphs are unaffected.
+
+    function _readSourcePort(sourceNodeId, sourcePortId) {
+        const csm = window.cellStoreManager;
+        const src = window.NodeGraph.nodes[sourceNodeId];
+        if (!src) return [];
+
+        const outHeaders = src.headers.filter(h => h.direction !== 'in');
+
+        // Which group does this wire leave from? Ports carry an '-out' suffix on
+        // the rendered element, so match the bare portId too.
+        const bare  = String(sourcePortId || '').replace(/-out$/, '');
+        const from  = outHeaders.find(h => h.portId === bare);
+        const group = from && from.outputGroup;
+
+        const carried = group
+            ? outHeaders.filter(h => h.outputGroup === group)
+            : outHeaders.filter(h => !h.outputGroup);
+
+        // A wire drawn from an ungrouped port on a node that only has grouped
+        // outputs would otherwise carry nothing — fall back to everything.
+        const cols = carried.length ? carried : outHeaders;
+
+        return cols.map(h => ({
+            portId: h.portId,
+            label:  h.label,
+            // Columnar path: operator output stored as h.values (no CellStore lookup)
+            // CellStore path: source/table node data stored via h.cellIds
+            values: h.values
+                ? h.values
+                : (h.cellIds || []).map(id => {
+                    const cell = csm.get(id);
+                    return cell ? cell.value : '';
+                })
+        }));
+    }
+
     // ── Write output back to a node ───────────────────────────────────────────
     //
     //   outputCols: [{ label, values: string[], direction: 'out' }]
+
+    // ── Stable output port ids ────────────────────────────────────────────────
+    //
+    //   Output ports MUST keep the same id across runs. They used to be minted
+    //   with crypto.randomUUID() on every write, so any wire leaving an operator
+    //   node referenced a port id that no longer existed the moment that node
+    //   re-executed — the downstream node then reported "no input connected".
+    //   Chaining operator to operator was rare enough for this to go unnoticed;
+    //   branching makes it unavoidable.
+    //
+    //   Deriving the id from nodeId + output group + column label keeps a wire
+    //   valid as long as the column it points at still exists, and lets a
+    //   renamed or dropped column correctly invalidate its wire.
+
+    function _outPortId(node, group, label) {
+        const slug = String(label).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        return node.id + ':' + (group || 'out') + ':' + (slug || 'col');
+    }
 
     function _writeOutput(node, outputCols) {
         const csm = window.cellStoreManager;
@@ -99,14 +154,60 @@ window.nodeExecutor = (function () {
             }
         });
 
+        // Keep the structural 'in' ports. They are the anchor an incoming wire
+        // renders against, so dropping them leaves every inbound connection
+        // unpaintable after the first run (_writeJoinOutput always did this).
+        const structuralIn = node.headers.filter(h => h.direction === 'in');
+
         // Write operator output as columnar string arrays — zero CellStore allocation
-        node.headers = outputCols.map(col => ({
-            portId:    'port-' + crypto.randomUUID().slice(0, 8),
+        node.headers = structuralIn.concat(outputCols.map(col => ({
+            portId:    _outPortId(node, col.outputGroup, col.label),
             label:     col.label,
             values:    col.values.map(v => String(v)),  // plain array, no CellStore
             cellIds:   [],                               // kept for structural compat
-            direction: col.direction || 'out'
-        }));
+            direction: col.direction || 'out',
+            outputGroup: col.outputGroup || null
+        })));
+    }
+
+    // ── Multi-output write ────────────────────────────────────────────────────
+    //
+    //   groups: [{ name, label, columns: [{ label, values }] }]
+    //
+    //   Writes several NAMED OUTPUTS onto one node. Each group's columns are
+    //   tagged with `outputGroup`, and `_readSourcePort` uses that tag to decide
+    //   what a wire leaving a given port carries. This is the mechanism behind
+    //   branching: a Diff node emits added/removed/modified, and three wires
+    //   leave it carrying three different tables.
+    //
+    //   Preserved from _writeOutput: excludedCols filtering and CellStore
+    //   release, so a multi-output node behaves like any other on those paths.
+
+    function _writeOutputGroups(node, groups) {
+        const csm = window.cellStoreManager;
+        const excluded = new Set(node.config?.excludedCols || []);
+
+        node.headers.forEach(h => {
+            if (h.cellIds && h.cellIds.length > 0) h.cellIds.forEach(id => csm.release(id));
+        });
+
+        const headers = node.headers.filter(h => h.direction === 'in');
+        groups.forEach(g => {
+            g.columns
+                .filter(c => !excluded.has(c.label))
+                .forEach(col => {
+                    headers.push({
+                        portId:      _outPortId(node, g.name, col.label),
+                        label:       col.label,
+                        values:      col.values.map(v => String(v)),
+                        cellIds:     [],
+                        direction:   'out',
+                        outputGroup: g.name,
+                        groupLabel:  g.label || g.name
+                    });
+                });
+        });
+        node.headers = headers;
     }
 
     // ── Handlers ──────────────────────────────────────────────────────────────
@@ -230,8 +331,8 @@ window.nodeExecutor = (function () {
         const mode = cfg.mode || 'stack';
 
         // Resolve both source tables from the fixed structural ports
-        const leftData  = _getJoinSideData(node, 'join-in-left');
-        const rightData = _getJoinSideData(node, 'join-in-right');
+        const leftData  = _readNamedInput(node, 'join-in-left');
+        const rightData = _readNamedInput(node, 'join-in-right');
 
         if (!leftData && !rightData) {
             throw new Error('Join: connect at least one table');
@@ -268,25 +369,132 @@ window.nodeExecutor = (function () {
         }
     }
 
-    // Get all columns from the source node wired to a fixed port (join-in-left or join-in-right)
-    function _getJoinSideData(node, fixedPortId) {
-        const csm  = window.cellStoreManager;
+    // ── Named-input read ──────────────────────────────────────────────────────
+    //
+    //   Returns the columns arriving at one NAMED INPUT PORT, or null when
+    //   nothing is wired there. This is what lets a node take several distinct
+    //   inputs that must not be merged — join's Left/Right, and diff's
+    //   Before/After — instead of the flat `_buildInputMap` blend.
+    //
+    //   Join used to hand-roll this against its own fixed port ids. Keeping it
+    //   general means the next multi-input node declares two headers and calls
+    //   this, rather than copying the lookup.
+
+    function _readNamedInput(node, inputPortId) {
         const wire = Object.values(window.NodeGraph.wires).find(
-            w => w.targetNodeId === node.id && w.targetPortId === fixedPortId
+            w => w.targetNodeId === node.id && w.targetPortId === inputPortId
         );
         if (!wire) return null;
-        const src = window.NodeGraph.nodes[wire.sourceNodeId];
-        if (!src) return null;
-        return src.headers
-            .filter(h => h.direction !== 'in')
-            .map(h => ({
-                portId: h.portId,
-                label:  h.label,
-                // Columnar path: operator outputs; CellStore path: source table headers
-                values: h.values
-                    ? h.values
-                    : (h.cellIds || []).map(id => { const c = csm.get(id); return c ? c.value : ''; })
-            }));
+        const cols = _readSourcePort(wire.sourceNodeId, wire.sourcePortId);
+        return cols.length ? cols : null;
+    }
+
+    // ── condition — route rows down a Match / No Match branch ─────────────────
+    //
+    //   PRO (node-condition). The same test as filter, but nothing is discarded:
+    //   rows that fail the test leave through the second output instead of being
+    //   dropped. That is the whole difference between filtering and routing, and
+    //   it is only expressible now that a node can carry more than one output.
+    //
+    //   Reuses _testRow so the operator vocabulary cannot drift from filter's.
+
+    function _handleCondition(node, inputMap) {
+        const cfg = node.config || {};
+        if (!cfg.column || !inputMap[cfg.column]) {
+            throw new Error('Condition: no column selected or no input connected');
+        }
+
+        const testCol  = inputMap[cfg.column];
+        const allPorts = Object.keys(inputMap);
+        const numRows  = allPorts.reduce((m, p) => Math.max(m, inputMap[p].values.length), 0);
+
+        const matchIdx = [], elseIdx = [];
+        for (let r = 0; r < numRows; r++) {
+            (_testRow(testCol.values[r], cfg.operator, cfg.value) ? matchIdx : elseIdx).push(r);
+        }
+
+        const pick = idx => allPorts.map(p => ({
+            label:  inputMap[p].label,
+            values: idx.map(i => inputMap[p].values[i] ?? '')
+        }));
+
+        _writeOutputGroups(node, [
+            { name: 'match', label: 'Match',    columns: pick(matchIdx) },
+            { name: 'else',  label: 'No Match', columns: pick(elseIdx) }
+        ]);
+    }
+
+    // ── diff — compare two table versions into three named outputs ────────────
+    //
+    //   Rows are identified by a key column, matched by LABEL across the two
+    //   inputs (the two sides are different nodes, so port ids never match).
+    //   added    — key present in After but not Before
+    //   removed  — key present in Before but not After
+    //   modified — key in both, but at least one shared column differs
+    //
+    //   Modified rows are emitted in their After state, plus a `Changed Columns`
+    //   column naming what differs. Reporting WHICH fields moved is the whole
+    //   point of a diff over a plain anti-join.
+
+    function _handleDiff(node) {
+        const cfg    = node.config || {};
+        const before = _readNamedInput(node, 'diff-in-before');
+        const after  = _readNamedInput(node, 'diff-in-after');
+
+        if (!before) throw new Error('Diff: Before input not connected');
+        if (!after)  throw new Error('Diff: After input not connected');
+        if (!cfg.keyColumn) throw new Error('Diff: key column not configured');
+
+        const keyBefore = before.find(c => c.portId === cfg.keyColumn);
+        if (!keyBefore) throw new Error('Diff: key column not found in Before input');
+        const keyAfter = after.find(c => c.label === keyBefore.label);
+        if (!keyAfter) throw new Error(`Diff: After input has no "${keyBefore.label}" column to match on`);
+
+        // Columns compared for modification: shared by label, minus the key.
+        const sharedLabels = before
+            .map(c => c.label)
+            .filter(l => l !== keyBefore.label && after.some(c => c.label === l));
+
+        const rowsOf = (cols, keyCol) => {
+            const n = cols.reduce((m, c) => Math.max(m, c.values.length), 0);
+            const byKey = new Map();
+            for (let r = 0; r < n; r++) {
+                const k = String(keyCol.values[r] ?? '');
+                if (k === '') continue;             // unkeyed rows cannot be matched
+                if (!byKey.has(k)) byKey.set(k, r); // first occurrence wins
+            }
+            return { n, byKey };
+        };
+
+        const B = rowsOf(before, keyBefore);
+        const A = rowsOf(after,  keyAfter);
+
+        const addedIdx = [], removedIdx = [], modifiedIdx = [], changedCols = [];
+
+        A.byKey.forEach((ai, k) => {
+            if (!B.byKey.has(k)) { addedIdx.push(ai); return; }
+            const bi = B.byKey.get(k);
+            const diffs = sharedLabels.filter(label => {
+                const bc = before.find(c => c.label === label);
+                const ac = after.find(c => c.label === label);
+                return String(bc.values[bi] ?? '') !== String(ac.values[ai] ?? '');
+            });
+            if (diffs.length) { modifiedIdx.push(ai); changedCols.push(diffs.join(', ')); }
+        });
+
+        B.byKey.forEach((bi, k) => { if (!A.byKey.has(k)) removedIdx.push(bi); });
+
+        const pick = (cols, idx) => cols.map(c => ({
+            label:  c.label,
+            values: idx.map(i => c.values[i] ?? '')
+        }));
+
+        _writeOutputGroups(node, [
+            { name: 'added',    label: 'Added',    columns: pick(after,  addedIdx) },
+            { name: 'removed',  label: 'Removed',  columns: pick(before, removedIdx) },
+            { name: 'modified', label: 'Modified', columns: pick(after, modifiedIdx)
+                .concat([{ label: 'Changed Columns', values: changedCols }]) }
+        ]);
     }
 
     // ── Join mode implementations ──────────────────────────────────────────────
@@ -427,7 +635,7 @@ window.nodeExecutor = (function () {
         // Append new output columns as columnar arrays — zero CellStore allocation
         outputCols.forEach(col => {
             node.headers.push({
-                portId:    'port-' + crypto.randomUUID().slice(0, 8),
+                portId:    _outPortId(node, null, col.label),
                 label:     col.label,
                 values:    col.values.map(v => String(v)),  // plain array, no CellStore
                 cellIds:   [],
@@ -550,6 +758,8 @@ window.nodeExecutor = (function () {
                         case 'formula': _handleFormula(node, inputMap); break;
                         case 'api':     await _handleApi(node);         break;
                         case 'join':    _handleJoin(node);              break;
+                        case 'diff':    _handleDiff(node);              break;
+                        case 'condition': _handleCondition(node, inputMap); break;
                         default: break;
                     }
                     node.execState = 'done';

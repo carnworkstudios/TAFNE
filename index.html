@@ -237,6 +237,47 @@
     <script src="/assets/os/contracts.js"></script>
     <script src="/assets/os/mcp.js"></script>
     <script src="/assets/os/bridge.js"></script>
+    <!-- GxPointer bootstrap. Every tool wires its buttons with
+         GxPointer.onPress(...) and does not guard the call, so if
+         /assets/os/pointer.js 404s or arrives late (file:// open, a tool served
+         from its own directory, a webview whose asset root differs) the first
+         onPress throws inside a synchronous init and aborts every button wired
+         after it — the toolbar goes dead with no error naming the button.
+         This inline shim guarantees window.GxPointer exists with identical
+         onPress/onCanvasDrag semantics; pointer.js upgrades it in place. -->
+    <script>
+    (function () {
+        if (window.GxPointer) return;
+        function primary(e) { return e.button === 0 && e.isPrimary !== false; }
+        function onPress(el, fn) {
+            if (!el) return;
+            el.addEventListener('pointerdown', function (e) { if (primary(e)) fn(e); });
+            el.addEventListener('click', function (e) { if (e.detail === 0) fn(e); });
+        }
+        function onCanvasDrag(el, h) {
+            if (!el) return;
+            var active = false;
+            el.addEventListener('pointerdown', function (e) {
+                if (!primary(e)) return;
+                active = true;
+                try { el.setPointerCapture(e.pointerId); } catch (err) {}
+                if (h && h.onDown) h.onDown(e);
+            });
+            el.addEventListener('pointermove', function (e) {
+                if (active && e.isPrimary !== false && h && h.onMove) h.onMove(e);
+            });
+            function end(e) {
+                if (!active) return;
+                active = false;
+                try { el.releasePointerCapture(e.pointerId); } catch (err) {}
+                if (h && h.onUp) h.onUp(e);
+            }
+            el.addEventListener('pointerup', end);
+            el.addEventListener('pointercancel', end);
+        }
+        window.GxPointer = { onPress: onPress, onCanvasDrag: onCanvasDrag, __gxShim: true };
+    })();
+    </script>
     <script src="/assets/os/pointer.js"></script>
     <!-- "Open in Ginexys" on a published artifact page lands here with
          ?artifact=<id>[&region=<r>]. Loads the content from the public API —
@@ -290,6 +331,7 @@
     <script src="src/js/features/dragDrop.js"></script>
     <script src="src/js/features/cellHandles.js"></script>
     <script src="src/js/features/newTable.js"></script>
+    <script src="src/js/features/tableCanvas.js"></script>
     <script src="src/js/features/generateFunctions.js"></script>
     <script src="src/js/features/parseInputs.js"></script>
     <script src="src/js/features/tableManipulation.js"></script>
@@ -1287,13 +1329,21 @@
             <!-- LEFT: every equation in this document -->
             <div id="eqList" class="eq-list"></div>
 
-            <!-- RIGHT: source, error, preview, palette -->
+            <!-- RIGHT: name, rendered equation, source disclosure, palette -->
             <div class="eq-work">
               <div class="eq-meta">
                 <label for="eqName">Name</label>
                 <input id="eqName" type="text" autocomplete="off" spellcheck="false" />
               </div>
+              <div
+                id="eqPreview"
+                class="eq-preview"
+                tabindex="0"
+                role="textbox"
+                aria-label="Equation — click to place the cursor, then type"
+              ></div>
               <div class="eq-source-wrap">
+                <button type="button" class="eq-source-label" aria-expanded="false" aria-controls="eqSource">Equation source <span>Advanced</span></button>
                 <textarea
                   id="eqSource"
                   spellcheck="false"
@@ -1302,7 +1352,6 @@
                 ></textarea>
                 <div id="eqError" class="eq-error"></div>
               </div>
-              <div id="eqPreview" class="eq-preview"></div>
               <div id="eqPalette" class="eq-palette"></div>
             </div>
           </div>
@@ -1317,6 +1366,14 @@
             class="text-center"
           ></p> -->
           <div class="table-container" id="tableContainer"></div>
+          <!-- Canvas controls: free-position tables, pan and zoom (Numbers-style) -->
+          <div class="tf-zoom-bar" id="tfZoomBar">
+            <button type="button" id="tfCanvasToggle" title="Toggle canvas layout">▦</button>
+            <button type="button" id="tfZoomOut" title="Zoom out (⌘−)">−</button>
+            <span class="tf-zoom-level" id="tfZoomLevel" title="Click to reset to 100% (⌘0)">100%</span>
+            <button type="button" id="tfZoomIn" title="Zoom in (⌘+)">+</button>
+            <button type="button" id="tfZoomFit" title="Fit all tables">⛶</button>
+          </div>
         </div>
 
         <!-- Sheet tab bar -->
@@ -2235,6 +2292,8 @@
           });
         }
       }
+      // Exposed so node placement can enforce the same gate the palette shows.
+      window.openProWaitlist = openProWaitlist;
 
       // Wire Ginexys Send button — always present, works standalone or embedded
       (function () {
@@ -2249,7 +2308,7 @@
           } else {
             openProWaitlist(
               "ipc-cross-tool",
-              "Send your TAFNE data to PDF Processor or Schema Editor. Cross-tool flow is a Pro feature.",
+              "Send your TAFNE data to Document Workbench or Schema Editor. Cross-tool flow is a Pro feature.",
             );
           }
         });
@@ -2262,10 +2321,10 @@
             toolKey: "tifany_gen_count",
             triggerIds: ["generateCode", "downloadCode"],
             tip: {
-              text: "This table is cleaned and structured — send it into PDF Processor or Schema Editor to keep using it, no re-export.",
+              text: "This table is cleaned and structured — send it into Document Workbench or Schema Editor to keep using it, no re-export.",
               cta: "Send it →",
               featureSlug: "cross-tool-send",
-              subtitle: "Send your TAFNE data to PDF Processor or Schema Editor — with lineage intact. Cross-tool flow is a Pro feature.",
+              subtitle: "Send your TAFNE data to Document Workbench or Schema Editor — with lineage intact. Cross-tool flow is a Pro feature.",
             },
           });
         }
@@ -2381,7 +2440,7 @@
             );
             $.toast({
               heading: "TAFNE",
-              text: "PDF Processor opened — extract there, then Send to TAFNE",
+              text: "Document Workbench opened — extract there, then Send to TAFNE",
               icon: "info",
               loader: false,
               stack: false,

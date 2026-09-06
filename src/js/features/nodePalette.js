@@ -11,7 +11,8 @@ function initNodePalette() {
 
     window.GxPointer.onPress(btn, function (e) {
         e.stopPropagation();
-        _togglePalette();
+        if (window.nodePaletteOpen) _closePalette();
+        else _openPalette();
     });
 
     // Close on outside click
@@ -23,11 +24,6 @@ function initNodePalette() {
 
     // Build palette buttons from NodeTypes registry
     _buildPalette(palette);
-}
-
-function _togglePalette() {
-    if (window.nodePaletteOpen) _closePalette();
-    else _openPalette();
 }
 
 function _openPalette() {
@@ -48,7 +44,10 @@ function _closePalette() {
 }
 
 function _buildPalette(palette) {
-    const operatorTypes = ['filter', 'vlookup', 'formula', 'join', 'api'];
+    // Order is the palette order. Whether an entry is Pro-locked comes from the
+    // type registry's `pro` slug, so tiering is declared in one place rather
+    // than duplicated as hardcoded markup here.
+    const operatorTypes = ['filter', 'condition', 'vlookup', 'formula', 'join', 'diff', 'api'];
     palette.innerHTML = '';
 
     const heading = document.createElement('div');
@@ -57,31 +56,44 @@ function _buildPalette(palette) {
     palette.appendChild(heading);
 
     operatorTypes.forEach(type => {
-        const def = window.NodeTypes.get(type);
+        const def  = window.NodeTypes.get(type);
+        const icon = `<span class="ne-palette-icon" style="background:${def.color}">${def.icon}</span>`;
+
+        if (def.pro) {
+            // Locked: the interceptor swallows the click and opens the waitlist.
+            const wrap = document.createElement('div');
+            wrap.className = 'ne-palette-item gx-pro-locked';
+            wrap.style.position = 'relative';
+            wrap.innerHTML = `
+        ${icon}
+        <span class="ne-palette-info"><strong>${def.label} <span class="gx-pro-badge">PRO</span></strong><em>${def.description}</em></span>
+        <div class="gx-pro-interceptor" data-pro-feature="${def.pro}"></div>`;
+            palette.appendChild(wrap);
+            return;
+        }
+
         const btn = document.createElement('button');
         btn.className = 'ne-palette-item';
-        btn.innerHTML = `<span class="ne-palette-icon" style="background:${def.color}">${def.icon}</span><span class="ne-palette-info"><strong>${def.label}</strong><em>${def.description}</em></span>`;
+        btn.innerHTML = `${icon}<span class="ne-palette-info"><strong>${def.label}</strong><em>${def.description}</em></span>`;
         window.GxPointer.onPress(btn, function () {
             _placeOperatorNode(type);
             _closePalette();
         });
         palette.appendChild(btn);
     });
-
-    // Pro-gated: Condition node
-    const condWrap = document.createElement('div');
-    condWrap.className = 'ne-palette-item gx-pro-locked';
-    condWrap.style.position = 'relative';
-    condWrap.innerHTML = `
-        <span class="ne-palette-icon" style="background:#7c3aed">⑂</span>
-        <span class="ne-palette-info"><strong>Condition <span class="gx-pro-badge">PRO</span></strong><em>Route rows through If/Else branches</em></span>
-        <div class="gx-pro-interceptor" data-pro-feature="node-condition"></div>`;
-    palette.appendChild(condWrap);
 }
 
 function _placeOperatorNode(type) {
     if (!window.nodeEditorEnabled) return;
     const def = window.NodeTypes.get(type);
+
+    // The palette renders Pro types as locked, but placement is also reachable
+    // from restored state and the MCP verb surface — so the gate is enforced
+    // here too rather than trusted to the UI that happens to call it.
+    if (def.pro) {
+        if (typeof window.openProWaitlist === 'function') window.openProWaitlist(def.pro);
+        return;
+    }
 
     // Place near canvas center
     const viewport = document.getElementById('nodeEditorViewport');

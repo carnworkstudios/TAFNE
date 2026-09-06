@@ -1195,6 +1195,20 @@ $(function () {
         $panel.toggleClass('panel-hidden', willHide);
         $btn.attr('title', willHide ? showTitle : hideTitle);
         $btn.toggleClass('active', !willHide);
+        const syncVisibleTables = function () {
+            $('#tableContainer table.tablecoil').each(function () {
+                if (typeof window.scheduleTableGeometrySync === 'function') window.scheduleTableGeometrySync(this);
+            });
+        };
+        syncVisibleTables();
+        // Follow every painted frame of the width transition. The table may
+        // keep the same intrinsic size while its viewport position changes,
+        // which means observing the table alone cannot move a fixed overlay.
+        const started = performance.now();
+        (function followPanelTransition(now) {
+            syncVisibleTables();
+            if (now - started < 280) requestAnimationFrame(followPanelTransition);
+        })(started);
     }
 
     $('#toggleLeftPanel').on('click', function () {
@@ -1231,6 +1245,9 @@ $(function () {
                 var delta = startX - e.clientX;
                 var newWidth = Math.min(600, Math.max(220, startWidth + delta));
                 $panel.css('width', newWidth + 'px');
+                $('#tableContainer table.tablecoil').each(function () {
+                    if (typeof window.scheduleTableGeometrySync === 'function') window.scheduleTableGeometrySync(this);
+                });
             });
 
             $(document).on('mouseup.rightResize', function () {
@@ -1343,6 +1360,7 @@ $(function () {
             '.md':   'markdown',
             '.sql':  'sql',
             '.json': 'json',
+            '.html': 'html',
         };
         var _inputType = _extTypeMap[gif.ext] || 'csv';
         $('#inputType').val(_inputType);
@@ -1384,22 +1402,50 @@ $(function () {
         }
     }
 
-    window.__gxSaveToHost = function () {
+    // Keep the native VS Code text document and this visual table surface on
+    // one document model. Table operations mark the source document dirty as
+    // they happen; Ctrl/Cmd+S remains the explicit disk-save boundary.
+    var _gxHostEditTimer = null;
+    var _gxApplyingHostUpdate = false;
+
+    function _gxSendToHost(type) {
         if (!window.CwsBridge?.isEmbedded) { return false; }
         var ext = (window.__GINEXYS_INITIAL_FILE__ || {}).ext || '.csv';
         var content;
         try { content = _gxSerializeForHost(ext); } catch (err) {
-            console.error('[GX] serialise for save failed:', err);
+            console.error('[GX] serialise for host failed:', err);
             content = null;
         }
-        if (typeof content !== 'string') {
-            if (typeof showToast === 'function') { showToast('Nothing to save yet', 'error'); }
-            return false;
-        }
-        window.CwsBridge.send('ginexys:save', { content: content });
-        if (typeof showToast === 'function') { showToast('Saved to file', 'success'); }
+        if (typeof content !== 'string') { return false; }
+        window.CwsBridge.send(type, { content: content });
         return true;
+    }
+
+    window.__gxSaveToHost = function () {
+        clearTimeout(_gxHostEditTimer);
+        var ok = _gxSendToHost('ginexys:save');
+        if (typeof showToast === 'function') {
+            showToast(ok ? 'Saved to file' : 'Nothing to save yet', ok ? 'success' : 'error');
+        }
+        return ok;
     };
+
+    // saveCurrentState is the common commit point for table mutations. Mirror
+    // those mutations into VS Code without writing the file on every click.
+    // Host-originated re-parses set _gxApplyingHostUpdate to prevent a loop.
+    if (window.CwsBridge?.isEmbedded && typeof window.saveCurrentState === 'function') {
+        var _gxOriginalSaveCurrentState = window.saveCurrentState;
+        window.saveCurrentState = function () {
+            var result = _gxOriginalSaveCurrentState.apply(this, arguments);
+            if (!_gxApplyingHostUpdate) {
+                clearTimeout(_gxHostEditTimer);
+                _gxHostEditTimer = setTimeout(function () {
+                    _gxSendToHost('ginexys:edit');
+                }, 150);
+            }
+            return result;
+        };
+    }
 
     // Ctrl/Cmd+S inside the webview saves to the real file. VS Code's own save
     // keybinding does not reach a custom editor's webview, so without this there
@@ -1565,10 +1611,82 @@ $(function () {
     // Updates sheets in-place so we never call addSheet() on every keystroke
     // (which would create thousands of tabs).
     if (window.CwsBridge?.isEmbedded) {
-        window.addEventListener('message', function (e) {
-            if (e.data?.type !== 'ginexys:document-changed') { return; }
-            ginexysUpdateSheets(e.data.payload.sheets);
+        // Preview → source: every HTML element that came from the opened file
+        // carries its original character range. Clicking it reveals that range
+        // in the native VS Code editor.
+        document.addEventListener('click', function (e) {
+            var el = e.target?.closest?.('[data-gx-source-start][data-gx-source-end]');
+            if (!el || !el.closest('#tableContainer')) return;
+            var start = Number(el.getAttribute('data-gx-source-start'));
+            var end = Number(el.getAttribute('data-gx-source-end'));
+            if (!Number.isInteger(start) || !Number.isInteger(end)) return;
+            window.CwsBridge.send('ginexys:reveal-source', { start: start, end: end });
         });
+
+        var _gxHostHandlers = {
+            'ginexys:document-changed': function (payload) {
+                _gxApplyingHostUpdate = true;
+                try {
+                    ginexysUpdateSheets(payload.sheets);
+                } finally {
+                    _gxApplyingHostUpdate = false;
+                }
+            },
+
+            // Refresh ranges after a visual edit changed source length. Browser
+            // parsers may insert implicit elements such as <tbody>, so match by
+            // tag in order and skip elements that have no source token.
+            'ginexys:source-ranges': function (payload) {
+                var elements = Array.from(document.querySelectorAll('#tableContainer table, #tableContainer table *'));
+                elements.forEach(function (el) {
+                    el.removeAttribute('data-gx-source-start');
+                    el.removeAttribute('data-gx-source-end');
+                });
+                var cursor = 0;
+                (payload?.ranges || []).forEach(function (range) {
+                    var tag = String(range.tag || '').toLowerCase();
+                    while (cursor < elements.length && elements[cursor].tagName.toLowerCase() !== tag) cursor++;
+                    if (cursor >= elements.length) return;
+                    elements[cursor].setAttribute('data-gx-source-start', String(range.start));
+                    elements[cursor].setAttribute('data-gx-source-end', String(range.end));
+                    cursor++;
+                });
+            },
+
+            // Source → preview: highlight the smallest mapped element containing
+            // the native editor's cursor/selection and bring it into view.
+            'ginexys:select-source': function (payload) {
+                document.querySelectorAll('.gx-vscode-source-selected').forEach(function (el) {
+                    el.classList.remove('gx-vscode-source-selected');
+                });
+                (payload?.selections || []).forEach(function (selection) {
+                    var best = null, bestSpan = Infinity;
+                    document.querySelectorAll('#tableContainer [data-gx-source-start][data-gx-source-end]').forEach(function (el) {
+                        var start = Number(el.getAttribute('data-gx-source-start'));
+                        var end = Number(el.getAttribute('data-gx-source-end'));
+                        if (start <= selection.start && selection.end <= end && end - start < bestSpan) {
+                            best = el;
+                            bestSpan = end - start;
+                        }
+                    });
+                    if (best) {
+                        best.classList.add('gx-vscode-source-selected');
+                        best.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                    }
+                });
+            }
+        };
+
+        window.addEventListener('message', function (e) {
+            _gxHostHandlers[e.data?.type]?.(e.data.payload || {});
+        });
+
+        if (!document.getElementById('gx-vscode-source-style')) {
+            var sourceStyle = document.createElement('style');
+            sourceStyle.id = 'gx-vscode-source-style';
+            sourceStyle.textContent = '.gx-vscode-source-selected{outline:2px solid #007acc!important;outline-offset:2px!important}';
+            document.head.appendChild(sourceStyle);
+        }
     }
 
     function ginexysUpdateSheets(sheetsData) {

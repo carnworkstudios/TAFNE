@@ -62,6 +62,24 @@
             }
         }
         if (!isFinite(left)) return null;
+
+        // The overlay is appended to <body>, outside every overflow clip that
+        // contains the table. Intersect its viewport rectangle with those
+        // clips explicitly or a scrolled selection paints over rulers, panes,
+        // and neighbouring cards even though the cells themselves are hidden.
+        const table = mapper.table || activeTable();
+        const clips = [];
+        const tableVp = table && table.closest('.tafne-table-vp');
+        const canvasVp = table && table.closest('.tf-canvas-viewport');
+        if (tableVp) clips.push(tableVp.getBoundingClientRect());
+        if (canvasVp) clips.push(canvasVp.getBoundingClientRect());
+        clips.forEach(clip => {
+            left = Math.max(left, clip.left);
+            top = Math.max(top, clip.top);
+            right = Math.min(right, clip.right);
+            bottom = Math.min(bottom, clip.bottom);
+        });
+        if (right <= left || bottom <= top) return null;
         return { left, top, width: right - left, height: bottom - top };
     }
 
@@ -521,22 +539,38 @@
         $(document).on('mousemove.tfhandle', onMove).on('mouseup.tfhandle', onUp);
     }
 
+    const DRAG_THRESHOLD_PX = 4;
+
+    // Turn a press into a move only once it travels far enough to be a drag.
+    // Below the threshold the press is left alone, so clicking through the
+    // overlay border still selects the cell underneath.
+    function armMove(e) {
+        const sx = e.clientX, sy = e.clientY;
+        function onMove(mv) {
+            if (Math.abs(mv.clientX - sx) <= DRAG_THRESHOLD_PX &&
+                Math.abs(mv.clientY - sy) <= DRAG_THRESHOLD_PX) return;
+            $(document).off('.tfarmmove');
+            beginGesture('move', mv);
+        }
+        $(document).on('mousemove.tfarmmove', onMove)
+                   .one('mouseup.tfarmmove', () => $(document).off('.tfarmmove'));
+    }
+
     function wireGestures() {
-        // Border edges → move, but ONLY on the second press of a double-click.
+        // Border edges → move the block on a single press-and-drag.
         //
-        // The border hit-frame surrounds the entire selection, so a plain
-        // press-and-drag anywhere near the selection's edge started moving the
-        // block. That is the same gesture as "click a cell and drag to extend a
-        // selection", and it fired far more often by accident than on purpose:
-        // a single stray drag overwrote the target cells.
+        // This used to require the second press of a double-click. The gate was
+        // added because the border hit-frame surrounds the whole selection, so a
+        // stray drag near the edge silently overwrote the target cells — but it
+        // also made the move undiscoverable, which is the actual complaint: no
+        // one double-clicks an edge to find out what happens.
         //
-        // e.detail is the click count the browser already tracks, so the second
-        // mousedown of a double-click reads 2. Requiring it means a move is
-        // always deliberate, and the double-click-then-drag gesture is
-        // untouched — it is now the only way in.
+        // The threshold below replaces the gate. A press only becomes a move
+        // once the pointer travels DRAG_THRESHOLD_PX, so a click still falls
+        // through to the cell underneath and only a deliberate drag moves data.
         $overlay.on('mousedown', '.tf-sel-edge', function (e) {
-            if (e.detail < 2) return;   // single press: let the click fall through
-            beginGesture('move', e);
+            if (e.button !== 0) return;
+            armMove(e);
         });
         // Edge nodes → stretch span (colspan/rowspan grows toward the drag)
         $overlay.on('mousedown', '.tf-sel-node', function (e) { beginGesture('span', e, $(this).attr('data-edge')); });
@@ -550,6 +584,8 @@
     window.addEventListener('resize', function () { if (!gestureActive) updateSelectionHandles(); });
     document.addEventListener('scroll', function () { if (!gestureActive) updateSelectionHandles(); }, true);
 
+    // Lets the ruler corner start a whole-table move through the same code path.
+    window.beginSelectionMove = function (ev) { ensureOverlay(); beginGesture('move', ev); };
     window.updateSelectionHandles = updateSelectionHandles;
     window.hideSelectionHandles = hideHandles;
 

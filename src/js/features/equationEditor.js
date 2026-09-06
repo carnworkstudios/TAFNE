@@ -13,9 +13,17 @@
 // It is two things sharing one renderer:
 //
 //   1. EQUATION MODE — a full-canvas editor (same shape as Node Editor and Lab
-//      Mode): a list of equations on the left, TeX source and live preview on
-//      the right, a symbol palette for the glyphs nobody remembers the macro
-//      for.
+//      Mode): a list of equations on the left, the equation itself on the
+//      right, a symbol palette for the glyphs nobody remembers the macro for.
+//
+//      THE RENDERED EQUATION IS THE EDITOR. You click into the typeset maths
+//      and a caret appears between the glyphs, as it would in a word
+//      processor; arrows walk it atom by atom, typing and Backspace edit the
+//      TeX underneath. It never swaps itself for a source field — the LaTeX
+//      lives in the "Equation source" disclosure below, closed by default,
+//      for the times you want to work on the TeX directly. Two views, one
+//      string, and the picture stays on screen while you correct it. See
+//      "Source ↔ render mapping" below for how a click becomes an offset.
 //
 //   2. INLINE CELL MATH — a table cell whose text is `$…$` or `$$…$$` renders
 //      as math in the table view. Scientific tables are full of formulas, and a
@@ -83,7 +91,10 @@ function renderLatex(latex, opts) {
                 output: 'html',
                 throwOnError: true,
                 strict: false,
-                trust: false,
+                // `\htmlData` is the ONE command this editor is allowed to
+                // inject, and only for the source map below. `\url` and
+                // `\href` stay untrusted, here and everywhere else.
+                trust: opts.mapped ? function (ctx) { return ctx.command === '\\htmlData'; } : false,
             }),
             error: null,
         };
@@ -100,6 +111,231 @@ function _eqEsc(s) {
     return String(s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ── Source ↔ render mapping ────────────────────────────────────────────────
+//
+// KaTeX hands back a typeset tree with no link to the characters it came from,
+// so a click on a glyph cannot be turned into a position in the TeX — which is
+// why the rendered box used to give up and swap itself for a source field the
+// moment you touched it. Two editors for one string, and the picture you were
+// trying to correct disappeared exactly when you went to correct it.
+//
+// The fix is to make the render carry its own source map. Every atom is wrapped
+// in `\htmlData{eqo=<offset>,eql=<length>}` before typesetting, which KaTeX
+// emits as data attributes on the span it builds for that atom. The caret is
+// then an ordinary integer offset into #eqSource, and the rendered equation is
+// a real editing surface rather than a preview.
+//
+// Two things are deliberately left un-anchored, because a wrapper would change
+// the render rather than just annotate it:
+//   • anything a script attaches to — `\htmlData{}{\sum}_{k}` sets the limit
+//     beside the sigma instead of under it;
+//   • text-mode arguments — KaTeX merges adjacent letters into one span and
+//     instrumenting inside `\text{...}` splits them.
+// Both stay editable in the source field, and the caret still steps over them.
+//
+// When the TeX uses something this walker cannot instrument safely, it returns
+// null and the preview renders plain. A missing caret is a small loss; a
+// preview that silently disagrees with the source is not.
+
+var EQ_BARE_CMDS = {
+    '\\left': 1, '\\right': 1, '\\middle': 1,
+    '\\big': 1, '\\Big': 1, '\\bigg': 1, '\\Bigg': 1,
+    '\\bigl': 1, '\\Bigl': 1, '\\biggl': 1, '\\Biggl': 1,
+    '\\bigr': 1, '\\Bigr': 1, '\\biggr': 1, '\\Biggr': 1,
+    '\\\\': 1, '\\limits': 1, '\\nolimits': 1,
+};
+var EQ_ARG_CMDS = {
+    '\\frac': 1, '\\dfrac': 1, '\\tfrac': 1, '\\cfrac': 1, '\\binom': 1,
+    '\\dbinom': 1, '\\tbinom': 1, '\\sqrt': 1, '\\overline': 1, '\\underline': 1,
+    '\\hat': 1, '\\bar': 1, '\\vec': 1, '\\tilde': 1, '\\dot': 1, '\\ddot': 1,
+    '\\widehat': 1, '\\widetilde': 1, '\\overrightarrow': 1, '\\boxed': 1,
+    '\\text': 1, '\\textbf': 1, '\\textit': 1, '\\textrm': 1, '\\mathbb': 1,
+    '\\mathbf': 1, '\\mathcal': 1, '\\mathfrak': 1, '\\mathrm': 1, '\\mathsf': 1,
+    '\\mathtt': 1, '\\mathit': 1, '\\operatorname': 1, '\\stackrel': 1,
+    '\\overset': 1, '\\underset': 1, '\\substack': 1, '\\textcolor': 1,
+    '\\colorbox': 1, '\\fcolorbox': 1, '\\phantom': 1, '\\hphantom': 1,
+    '\\vphantom': 1, '\\href': 1, '\\htmlData': 1, '\\htmlClass': 1,
+    '\\htmlId': 1, '\\htmlStyle': 1, '\\raisebox': 1, '\\rule': 1, '\\color': 1,
+};
+
+// Text-mode arguments are left whole. KaTeX merges adjacent letters into one
+// span, and instrumenting inside `\text{...}` splits them — identical to read,
+// but no longer the same markup. Prose is edited in the source field; the
+// rendered caret treats the whole `\text{...}` as one atom.
+var EQ_OPAQUE_CMDS = {
+    '\\text': 1, '\\textbf': 1, '\\textit': 1, '\\textrm': 1, '\\textsf': 1,
+    '\\texttt': 1, '\\textnormal': 1, '\\operatorname': 1, '\\mbox': 1, '\\hbox': 1,
+};
+
+function _eqIsSpace(c) { return c === ' ' || c === '\t' || c === '\n' || c === '\r'; }
+
+function _eqSkipSpace(src, i) { while (i < src.length && _eqIsSpace(src.charAt(i))) i++; return i; }
+
+/** Find the offset just past the `\end{...}` matching the `\begin` at `from`. */
+function _eqEnvEnd(src, from) {
+    var depth = 0, i = from;
+    while (i < src.length) {
+        if (src.charAt(i) === '\\') {
+            if (src.substr(i, 6) === '\\begin') { depth++; i += 6; continue; }
+            if (src.substr(i, 4) === '\\end') {
+                i += 4;
+                i = _eqSkipSpace(src, i);
+                if (src.charAt(i) !== '{') return -1;
+                var close = src.indexOf('}', i);
+                if (close < 0) return -1;
+                i = close + 1;
+                if (--depth === 0) return i;
+                continue;
+            }
+            i += 2; continue;
+        }
+        i++;
+    }
+    return -1;
+}
+
+/**
+ * Walk the TeX into a tree of atoms carrying their source offsets.
+ * `st.bad` is set by anything this mapper cannot instrument without changing
+ * the render; the caller then falls back to a plain, unmapped typeset.
+ */
+function _eqScan(st, i) {
+    var src = st.src, nodes = [];
+    while (i < src.length && !st.bad) {
+        var c = src.charAt(i);
+        if (c === '}') break;
+
+        if (_eqIsSpace(c) || c === '&' || c === '^' || c === '_') {
+            nodes.push({ k: 'raw', s: i, e: i + 1 }); i++; continue;
+        }
+
+        if (c === '{') {
+            var g = _eqScan(st, i + 1);
+            if (src.charAt(g.i) !== '}') { st.bad = true; break; }
+            nodes.push({ k: 'group', s: i, e: g.i + 1, kids: g.nodes });
+            i = g.i + 1; continue;
+        }
+
+        if (c === '\\') {
+            var m = /^\\(?:[a-zA-Z]+|[\s\S])/.exec(src.slice(i));
+            if (!m) { st.bad = true; break; }
+            var name = m[0], j = i + name.length;
+
+            if (name === '\\begin') {
+                var end = _eqEnvEnd(src, i);
+                if (end < 0) { st.bad = true; break; }
+                nodes.push({ k: 'atom', s: i, e: end }); i = end; continue;
+            }
+            if (name === '\\end') { st.bad = true; break; }
+
+            if (EQ_BARE_CMDS[name]) {
+                // `\left` owns the delimiter that follows it; a wrapper between
+                // the two is a parse error, not a styling difference.
+                var k = _eqSkipSpace(src, j);
+                var d = /^(\\[a-zA-Z]+|[\s\S])/.exec(src.slice(k));
+                var e2 = /^\\(left|right|middle|big|Big|bigg|Bigg)/.test(name) && d ? k + d[0].length : j;
+                nodes.push({ k: 'raw', s: i, e: e2 }); i = e2; continue;
+            }
+
+            var opt = null;
+            var p = _eqSkipSpace(src, j);
+            if (src.charAt(p) === '[') {
+                var cb = src.indexOf(']', p);
+                if (cb < 0) { st.bad = true; break; }
+                opt = [p, cb + 1]; j = cb + 1;
+            }
+
+            var args = [];
+            for (;;) {
+                var q = _eqSkipSpace(src, j);
+                if (src.charAt(q) !== '{') break;
+                var ag = _eqScan(st, q + 1);
+                if (st.bad || src.charAt(ag.i) !== '}') { st.bad = true; break; }
+                args.push({ kids: ag.nodes });
+                j = ag.i + 1;
+            }
+            if (st.bad) break;
+            // `\frac ab` is legal TeX whose arguments have no braces to wrap.
+            if (!args.length && EQ_ARG_CMDS[name]) { st.bad = true; break; }
+
+            if (EQ_OPAQUE_CMDS[name]) nodes.push({ k: 'atom', s: i, e: j });
+            else nodes.push({ k: 'cmd', s: i, e: j, name: name, opt: opt, args: args });
+            i = j; continue;
+        }
+
+        nodes.push({ k: 'atom', s: i, e: i + 1 });
+        i++;
+    }
+    return { nodes: nodes, i: i };
+}
+
+function _eqWrap(tex, s, e) {
+    return '\\htmlData{eqo=' + s + ',eql=' + (e - s) + '}{' + tex + '}';
+}
+
+/**
+ * A wrapper turns its contents into an ordinary group, which is invisible for
+ * most atoms and wrong for exactly one case: an operator carrying limits.
+ * `\sum_{k}` sets its script under the sigma, `\htmlData{}{\sum}_{k}` sets it
+ * to the right. Anything a script is about to attach to is therefore emitted
+ * bare — it loses its own click target, never its shape.
+ */
+function _eqScripted(src, e) {
+    var k = _eqSkipSpace(src, e);
+    var c = src.charAt(k);
+    return c === '^' || c === '_' || src.substr(k, 7) === '\\limits' || src.substr(k, 9) === '\\nolimits';
+}
+
+function _eqEmit(nodes, st) {
+    var out = '', script = false;
+    for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i], piece;
+        if (n.k === 'raw') {
+            piece = st.src.slice(n.s, n.e);
+            // `x^\\htmlData{..}{2}` is a parse error: KaTeX will not take a
+            // function as a script. Braces make it a group, which it will.
+            out += script ? '{' + piece + '}' : piece;
+            script = (piece === '^' || piece === '_');
+            continue;
+        }
+        if (n.k === 'group') {
+            piece = '{' + _eqEmit(n.kids, st) + '}';
+        } else {
+            var tex;
+            if (n.k === 'atom') {
+                tex = st.src.slice(n.s, n.e);
+            } else {
+                tex = n.name + (n.opt ? st.src.slice(n.opt[0], n.opt[1]) : '');
+                for (var a = 0; a < n.args.length; a++) tex += '{' + _eqEmit(n.args[a].kids, st) + '}';
+            }
+            piece = (st.noWrap || _eqScripted(st.src, n.e)) ? tex : _eqWrap(tex, n.s, n.e);
+        }
+        out += script ? '{' + piece + '}' : piece;
+        script = false;
+    }
+    return out;
+}
+
+/** Every offset in the source a caret may sit at, ascending. */
+function _eqBoundaries(nodes, out) {
+    for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        out.push(n.s, n.e);
+        if (n.k === 'group') _eqBoundaries(n.kids, out);
+        else if (n.k === 'cmd') for (var a = 0; a < n.args.length; a++) _eqBoundaries(n.args[a].kids, out);
+    }
+    return out;
+}
+
+function _eqInstrument(tex, noWrap) {
+    var st = { src: String(tex == null ? '' : tex), bad: false, noWrap: !!noWrap };
+    var r = _eqScan(st, 0);
+    if (st.bad || r.i < st.src.length) return null;
+    var bounds = _eqBoundaries(r.nodes, [0, st.src.length]);
+    bounds = bounds.filter(function (v, i, a) { return a.indexOf(v) === i; }).sort(function (x, y) { return x - y; });
+    return { tex: _eqEmit(r.nodes, st), bounds: bounds };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -350,12 +586,27 @@ var EQ_PALETTE = [
     ] },
 ];
 
-/** Insert a palette snippet at the caret, honouring the `$1` caret marker. */
+/**
+ * Insert a palette snippet at the caret, honouring the `$1` caret marker.
+ *
+ * Two surfaces can own the caret — the rendered equation and the source field —
+ * and both write to the same string. `#eqSource.value` is that string, so the
+ * insertion is done there either way and the two views are never out of step.
+ */
 function insertLatexSnippet(snippet) {
     var ta = document.getElementById('eqSource');
     if (!ta) return;
     var caretIn = snippet.indexOf('$1');
     var text = caretIn >= 0 ? snippet.replace('$1', '') : snippet;
+
+    var out = document.getElementById('eqPreview');
+    if (out && out.classList.contains('eq-focus')) {
+        var at = _eqClamp(_eqCaret, ta.value.length);
+        _eqSplice(at, at, text, caretIn >= 0 ? at + caretIn : at + text.length);
+        out.focus();
+        return;
+    }
+
     var start = ta.selectionStart, end = ta.selectionEnd;
     // A selection is treated as the thing being wrapped: select `x+1`, press
     // the fraction button, and it becomes the numerator instead of vanishing.
@@ -365,6 +616,7 @@ function insertLatexSnippet(snippet) {
     var caret = caretIn >= 0 && !selected ? start + caretIn : start + text.length;
     ta.setSelectionRange(caret, caret);
     ta.focus();
+    _eqCaret = caret;
     ta.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
@@ -398,6 +650,12 @@ function enableEquationEditor() {
     _renderPalette();
     _renderEquationList();
     _renderActiveEquation();
+
+    // Open with the caret already in the equation. The rendered box is the
+    // editor now, so landing in it is the same courtesy as putting the cursor
+    // in a text field when a form opens.
+    var preview = document.getElementById('eqPreview');
+    if (preview && (!window.matchMedia || !window.matchMedia('(max-width: 900px)').matches)) preview.focus();
 
     $.toast({ heading: 'Equation Editor', text: 'Equation Editor activated', icon: 'info', loader: false, stack: false });
 }
@@ -444,7 +702,7 @@ function _renderEquationList() {
     var host = document.getElementById('eqList');
     if (!host) return;
     if (!window.equations.length) {
-        host.innerHTML = '<p class="eq-empty">No equations yet. Press <b>New</b>, or send some over from the PDF Processor.</p>';
+        host.innerHTML = '<p class="eq-empty">No equations yet. Press <b>New</b>, or send some over from the Document Workbench.</p>';
         return;
     }
     host.innerHTML = window.equations.map(function (eq) {
@@ -475,21 +733,168 @@ function _renderActiveEquation() {
     var name = document.getElementById('eqName');
     if (ta) ta.value = eq ? eq.latex : '';
     if (name) name.value = eq ? eq.name : '';
+    _eqCaret = ta ? ta.value.length : 0;
     _renderPreview();
 }
+
+// The caret is an offset into #eqSource — the same number the textarea's own
+// selectionStart holds — so the two surfaces hand it back and forth untouched.
+// `_eqStops` are the offsets it is allowed to land on: every atom boundary the
+// walker found, which is what makes an arrow key step over `\alpha` in one
+// press instead of six.
+var _eqCaret = 0;
+var _eqStops = [0];
+
+function _eqClamp(n, max) { return n < 0 ? 0 : (n > max ? max : n); }
 
 function _renderPreview() {
     var out = document.getElementById('eqPreview');
     var err = document.getElementById('eqError');
     var ta = document.getElementById('eqSource');
     if (!out || !ta) return;
-    var res = renderLatex(ta.value, { displayMode: true });
+
+    var src = ta.value;
+    var map = _eqInstrument(src);
+    var res = renderLatex(map ? map.tex : src, { displayMode: true, mapped: !!map });
+    // An anchor is never worth a broken render, and it must never be what the
+    // error is about. If the instrumented pass failed, the plain pass replaces
+    // it whether or not THAT succeeds — otherwise a typo in the user's TeX is
+    // reported at some position inside an `\htmlData` wrapper they never wrote,
+    // and the raw-source fallback shows them our annotation instead of their
+    // equation.
+    if (!res.ok && map) {
+        res = renderLatex(src, { displayMode: true });
+        map = null;
+    }
+
+    _eqStops = map ? map.bounds : [0, src.length];
+    _eqCaret = _eqClamp(_eqCaret, src.length);
+
     out.innerHTML = res.html || '<span class="eq-empty">Nothing to render yet.</span>';
     out.classList.toggle('eq-math-error', !res.ok);
+    out.classList.toggle('eq-unanchored', !map && !!src.trim());
     if (err) {
         err.textContent = res.error || '';
         err.style.display = res.error ? 'block' : 'none';
     }
+    _eqDrawCaret();
+}
+
+/** Rewrite [from, to) and put the caret at `caret`, through the one source. */
+function _eqSplice(from, to, insert, caret) {
+    var ta = document.getElementById('eqSource');
+    if (!ta) return;
+    ta.value = ta.value.slice(0, from) + insert + ta.value.slice(to);
+    _eqCaret = _eqClamp(caret, ta.value.length);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function _eqStopBefore(n) {
+    var best = 0;
+    for (var i = 0; i < _eqStops.length; i++) if (_eqStops[i] < n && _eqStops[i] > best) best = _eqStops[i];
+    return best;
+}
+
+function _eqStopAfter(n) {
+    var ta = document.getElementById('eqSource');
+    var best = ta ? ta.value.length : n;
+    for (var i = 0; i < _eqStops.length; i++) if (_eqStops[i] > n && _eqStops[i] < best) best = _eqStops[i];
+    return best;
+}
+
+/**
+ * Where the caret sits on screen.
+ *
+ * Anchors nest — the `a` inside `\frac{a}{b}` is inside the span for the whole
+ * fraction — so the SMALLEST anchor at an offset is the right one: it is the
+ * innermost atom, and the one whose edge a person means when they click there.
+ *
+ * Not every stop has an anchor. A superscript base is deliberately left
+ * un-wrapped, so the caret can legitimately be asked to sit somewhere no span
+ * reports. It then takes the nearest anchor on either side, which lands it on
+ * the correct glyph edge in every case that matters and never on the far edge
+ * of the box.
+ */
+function _eqCaretSpot(out) {
+    var host = out.getBoundingClientRect();
+    var spans = out.querySelectorAll('[data-eqo]');
+    var exactAfter = null, exactBefore = null, prev = null, next = null;
+
+    for (var i = 0; i < spans.length; i++) {
+        var el = spans[i];
+        var o = +el.getAttribute('data-eqo'), l = +el.getAttribute('data-eql');
+        if (o === _eqCaret && (!exactAfter || l < exactAfter.l)) exactAfter = { el: el, l: l };
+        if (o + l === _eqCaret && (!exactBefore || l < exactBefore.l)) exactBefore = { el: el, l: l };
+        if (o + l <= _eqCaret && (!prev || o + l > prev.end)) prev = { el: el, end: o + l };
+        if (o >= _eqCaret && (!next || o < next.start)) next = { el: el, start: o };
+    }
+
+    var pick = exactAfter || exactBefore || prev || next;
+    if (!pick) {
+        // Nothing to measure — an empty equation, or one with no anchors at
+        // all. The caret belongs where the equation would start, not pinned to
+        // whichever edge the box happens to have.
+        var box = (out.querySelector('.katex-html') || out).getBoundingClientRect();
+        return {
+            left: (box.width ? box.left : host.left + host.width / 2) - host.left + out.scrollLeft,
+            top: (box.height ? box.top : host.top + host.height / 2 - 11) - host.top + out.scrollTop,
+            height: box.height || 22,
+        };
+    }
+
+    var leftEdge = !!(exactAfter || (!exactBefore && !prev && next));
+    var r = pick.el.getBoundingClientRect();
+    return {
+        left: (leftEdge ? r.left : r.right) - host.left + out.scrollLeft,
+        top: r.top - host.top + out.scrollTop,
+        height: r.height || 22,
+    };
+}
+
+function _eqDrawCaret() {
+    var out = document.getElementById('eqPreview');
+    if (!out) return;
+    var bar = out.querySelector('.eq-caret');
+    if (!out.classList.contains('eq-focus')) { if (bar) bar.parentNode.removeChild(bar); return; }
+    if (!bar) {
+        bar = document.createElement('span');
+        bar.className = 'eq-caret';
+        out.appendChild(bar);
+    }
+    var spot = _eqCaretSpot(out);
+    bar.style.left = spot.left + 'px';
+    bar.style.top = spot.top + 'px';
+    bar.style.height = spot.height + 'px';
+}
+
+/** Turn a click anywhere in the box into an offset in the source. */
+function _eqCaretFromPoint(out, x, y) {
+    var hit = null;
+    var spans = out.querySelectorAll('[data-eqo]');
+    for (var i = 0; i < spans.length; i++) {
+        var el = spans[i];
+        var l = +el.getAttribute('data-eql');
+        var r = el.getBoundingClientRect();
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+            if (!hit || l < hit.l) hit = { el: el, l: l, r: r };
+        }
+    }
+    if (!hit) {
+        // Clicking past the end of the equation is the commonest way to ask for
+        // the end of the equation, so fall back to the nearest atom rather than
+        // to nothing.
+        var bestD = Infinity;
+        for (var k = 0; k < spans.length; k++) {
+            var re = spans[k].getBoundingClientRect();
+            var dx = x < re.left ? re.left - x : (x > re.right ? x - re.right : 0);
+            var dy = y < re.top ? re.top - y : (y > re.bottom ? y - re.bottom : 0);
+            var d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; hit = { el: spans[k], l: +spans[k].getAttribute('data-eql'), r: re }; }
+        }
+    }
+    if (!hit) return _eqCaret;
+    var o = +hit.el.getAttribute('data-eqo');
+    return x > hit.r.left + hit.r.width / 2 ? o + hit.l : o;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -538,8 +943,112 @@ function initEquationEditor() {
         if (window.activeEquationId) renameEquation(window.activeEquationId, this.value);
     });
 
+    $('#equationCanvas').on('pointerdown mousedown', '.eq-pal-btn', function (e) {
+        // Do not blur the rendered box before its palette insertion lands.
+        if (document.querySelector('#eqPreview.eq-focus')) e.preventDefault();
+    });
+
     $('#equationCanvas').on('click', '.eq-pal-btn', function () {
         insertLatexSnippet(this.getAttribute('data-tex'));
+    });
+
+    // ── The rendered equation is the editing surface ─────────────────────────
+    //
+    // It is NOT contenteditable, and that is the point: a contenteditable
+    // KaTeX tree can be typed into but not read back — the browser would let
+    // you edit glyph soup that no longer has a TeX to go with it. Clicks and
+    // keys are translated into edits of #eqSource instead, and the box is
+    // re-typeset from that. What you see is always the render of what is
+    // actually stored.
+    //
+    // A phone gets the source field instead: a div with no contenteditable
+    // never raises the soft keyboard, and a caret you cannot type into is
+    // worse than an honest text box.
+    $('#equationCanvas').on('mousedown', '#eqPreview', function (e) {
+        if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) return;
+        e.preventDefault();
+        _eqCaret = _eqCaretFromPoint(this, e.clientX, e.clientY);
+        this.focus();
+        _eqDrawCaret();
+    });
+
+    $('#equationCanvas').on('click', '#eqPreview', function () {
+        if (!window.matchMedia || !window.matchMedia('(max-width: 900px)').matches) return;
+        var wrap = document.querySelector('.eq-source-wrap');
+        if (wrap) wrap.classList.add('eq-source-open');
+        var ta = document.getElementById('eqSource');
+        if (ta) { ta.focus(); ta.setSelectionRange(_eqCaret, _eqCaret); }
+    });
+
+    $('#equationCanvas').on('focus', '#eqPreview', function () {
+        this.classList.add('eq-focus');
+        _eqDrawCaret();
+    });
+
+    $('#equationCanvas').on('blur', '#eqPreview', function () {
+        this.classList.remove('eq-focus');
+        _eqDrawCaret();
+    });
+
+    $('#equationCanvas').on('keydown', '#eqPreview', function (e) {
+        var ta = document.getElementById('eqSource');
+        if (!ta) return;
+        var len = ta.value.length;
+
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); _eqCaret = _eqStopBefore(_eqCaret); _eqDrawCaret(); return; }
+        if (e.key === 'ArrowRight') { e.preventDefault(); _eqCaret = _eqStopAfter(_eqCaret);  _eqDrawCaret(); return; }
+        if (e.key === 'Home')       { e.preventDefault(); _eqCaret = 0;   _eqDrawCaret(); return; }
+        if (e.key === 'End')        { e.preventDefault(); _eqCaret = len; _eqDrawCaret(); return; }
+        if (e.key === 'Escape')     { this.blur(); return; }
+
+        // Backspace takes the whole atom to the left, so `\alpha` goes in one
+        // press. Deleting it a character at a time would spend five of those
+        // presses rendering `\alph`, `\alp`, `\al` — none of which is anything.
+        if (e.key === 'Backspace') {
+            e.preventDefault();
+            if (!_eqCaret) return;
+            _eqSplice(_eqStopBefore(_eqCaret), _eqCaret, '', _eqStopBefore(_eqCaret));
+            return;
+        }
+        if (e.key === 'Delete') {
+            e.preventDefault();
+            if (_eqCaret >= len) return;
+            _eqSplice(_eqCaret, _eqStopAfter(_eqCaret), '', _eqCaret);
+            return;
+        }
+
+        if (e.key === 'Enter' || e.key === 'Tab') return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key.length !== 1) return;
+        e.preventDefault();
+        _eqSplice(_eqCaret, _eqCaret, e.key, _eqCaret + e.key.length);
+    });
+
+    $('#equationCanvas').on('paste', '#eqPreview', function (e) {
+        var cb = (e.originalEvent || e).clipboardData;
+        if (!cb) return;
+        e.preventDefault();
+        var text = cb.getData('text/plain') || '';
+        if (text) _eqSplice(_eqCaret, _eqCaret, text, _eqCaret + text.length);
+    });
+
+    // Moving the text cursor in the source field moves the rendered one too, so
+    // switching between the two surfaces does not lose your place.
+    $('#equationCanvas').on('keyup click select', '#eqSource', function () {
+        _eqCaret = this.selectionStart;
+    });
+
+    $('#equationCanvas').on('click', '.eq-source-label', function () {
+        var wrap = document.querySelector('.eq-source-wrap');
+        if (!wrap) return;
+        var open = wrap.classList.toggle('eq-source-open');
+        this.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+
+    // The caret is placed from measured rectangles, so it has to be redrawn
+    // when those move.
+    window.addEventListener('resize', function () {
+        if (window.equationEditorEnabled) _eqDrawCaret();
     });
 
     $('#equationCanvas').on('click', '.eq-item-del', function (e) {
@@ -558,6 +1067,9 @@ function initEquationEditor() {
         e.preventDefault();
         insertLatexSnippet('  ');
     });
+
+    var preview = document.getElementById('eqPreview');
+    if (preview) preview.addEventListener('scroll', _eqDrawCaret);
 
     _watchTableContainer();
 }

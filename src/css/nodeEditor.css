@@ -810,3 +810,23 @@
 }
 .ne-schema-col { cursor: pointer; user-select: none; }
 .ne-schema-col-off { opacity: 0.35; text-decoration: line-through; }
+
+/* ── Output group heading ───────────────────────────────────────────────────
+   A node with several named outputs (e.g. Diff → added / removed / modified)
+   renders one of these above each group's port rows, so it is clear which
+   port carries which table. */
+.ne-node-group-heading {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--t-text-light);
+    padding: 5px 8px 2px;
+    margin-top: 2px;
+    border-top: 1px solid var(--t-border);
+    background: var(--t-bg-muted, rgba(0, 0, 0, 0.03));
+}
+.ne-node-col-rows > .ne-node-group-heading:first-child {
+    border-top: none;
+    margin-top: 0;
+}
